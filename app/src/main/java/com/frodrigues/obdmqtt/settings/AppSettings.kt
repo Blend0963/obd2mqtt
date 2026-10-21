@@ -81,6 +81,8 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
 
         const val DEFAULT_WEBHOOK_INTERVAL_SECONDS = 1
         val OBD_PROTOCOL = stringPreferencesKey("obdProtocol")
+        /** Protocol found in AUTO mode, tried first next time. */
+        val LAST_OBD_PROTOCOL = stringPreferencesKey("lastObdProtocol")
         val ENGINE_RUNNING_ONLY = booleanPreferencesKey("engineRunningOnly")
         val HA_TOKEN = stringPreferencesKey("haToken")
 
@@ -135,6 +137,14 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
     }
     val engineRunningOnly: Flow<Boolean> = dataStore.data.map { it[ENGINE_RUNNING_ONLY] ?: true }
     val haToken: Flow<String> = dataStore.data.map { it[HA_TOKEN] ?: "" }
+    val lastObdProtocol: Flow<ObdProtocol?> = dataStore.data.map { prefs ->
+        prefs[LAST_OBD_PROTOCOL]?.let { runCatching { ObdProtocol.valueOf(it) }.getOrNull() }
+    }
+
+    suspend fun saveLastObdProtocol(protocol: ObdProtocol) {
+        update { this[LAST_OBD_PROTOCOL] = protocol.name }
+    }
+
     val obdProtocol: Flow<ObdProtocol> = dataStore.data.map { prefs ->
         prefs[OBD_PROTOCOL]?.let { runCatching { ObdProtocol.valueOf(it) }.getOrNull() } ?: ObdProtocol.AUTO
     }

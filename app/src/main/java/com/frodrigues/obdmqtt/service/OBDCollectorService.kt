@@ -216,7 +216,7 @@ class OBDCollectorService : LifecycleService() {
 
         val sink = TelemetrySink.create(config, onStatus = { serverStatus.value = it }, onClearRequest = ::requestClearFaults)
         try {
-            val executor = ObdCommandExecutor(transport, config.obdProtocol)
+            val executor = ObdCommandExecutor(transport, config.obdProtocol, settings.lastObdProtocol.first())
             executor.resetAdapter()
 
             // Only the adapter is queried here (AT RV): a parked car's ECUs are never woken up
@@ -230,6 +230,7 @@ class OBDCollectorService : LifecycleService() {
             executor.connectEcu()
             ecuConnected = true
             DebugLog.add("Calculateur connecté — protocole : ${executor.detectedProtocol?.label ?: "inconnu"}")
+            executor.detectedProtocol?.let { settings.saveLastObdProtocol(it) }
             engineOffVoltage.value = null
             while (wakeups.tryReceive().isSuccess) Unit  // requests are handled by the diagnostics loop below
             obdProtocolLabel.value = executor.detectedProtocol?.label ?: ""

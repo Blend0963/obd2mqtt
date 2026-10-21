@@ -115,7 +115,7 @@ Le niveau de carburant, le kilométrage, la température d'huile ou la consommat
 | Symptôme | Piste |
 |---|---|
 | « Adaptateur ELM327 non détecté » | Adaptateur mal enfoncé, ou mauvais appareil Bluetooth sélectionné |
-| « Le calculateur ne répond pas (contact mis ?) » | Mettez le contact. Sinon, essayez un protocole forcé : CAN 11 bits 500 kbit/s, puis KWP2000 (init rapide) |
+| « Le calculateur ne répond sur aucun protocole » | Moteur tournant ? En mode Automatique, l'application essaie déjà chaque protocole. Sinon, regardez le **Journal** : des lignes `UNABLE TO CONNECT` sur tous les protocoles indiquent un calculateur qui ne répond pas en OBD2 standard |
 | Reste sur « Moteur arrêté » alors que le moteur tourne | Batterie ou alternateur faibles (moins de 13,3 V moteur tournant) : désactivez **Lire seulement moteur tournant** et faites contrôler la charge |
 | « Refusé par le calculateur » à l'effacement | Coupez le moteur en laissant le contact, puis recommencez |
 | Le bouton HA n'efface rien | Jeton absent ou invalide dans l'application, ou bouton pressé voiture coupée depuis plus de 2 minutes |
