@@ -36,7 +36,11 @@ data class AppConfig(
     val haUrl: String = "",
     val webhookId: String = "",
     val webhookIntervalSeconds: Int = AppSettings.DEFAULT_WEBHOOK_INTERVAL_SECONDS,
-    val obdProtocol: ObdProtocol = ObdProtocol.AUTO
+    val obdProtocol: ObdProtocol = ObdProtocol.AUTO,
+    /** Only query the ECU when the alternator is charging, so a parked car is never woken up. */
+    val engineRunningOnly: Boolean = true,
+    /** Optional HA long-lived token: lets the app read the "clear faults" button state from HA. */
+    val haToken: String = ""
 ) {
     val mqttClientId: String get() = "obd2_android_${btDeviceMac.replace(":", "")}"
 }
@@ -71,6 +75,8 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
 
         const val DEFAULT_WEBHOOK_INTERVAL_SECONDS = 1
         val OBD_PROTOCOL = stringPreferencesKey("obdProtocol")
+        val ENGINE_RUNNING_ONLY = booleanPreferencesKey("engineRunningOnly")
+        val HA_TOKEN = stringPreferencesKey("haToken")
 
         // Default fast PIDs (1 s) — live driving data; only those the car supports are polled.
         // RPM, Speed, Load, Throttle, Coolant, MAP, MAF, battery voltage (AT RV)
@@ -108,6 +114,8 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
     val publishMode: Flow<PublishMode> = dataStore.data.map { prefs ->
         prefs[PUBLISH_MODE]?.let { runCatching { PublishMode.valueOf(it) }.getOrNull() } ?: PublishMode.WEBHOOK
     }
+    val engineRunningOnly: Flow<Boolean> = dataStore.data.map { it[ENGINE_RUNNING_ONLY] ?: true }
+    val haToken: Flow<String> = dataStore.data.map { it[HA_TOKEN] ?: "" }
     val obdProtocol: Flow<ObdProtocol> = dataStore.data.map { prefs ->
         prefs[OBD_PROTOCOL]?.let { runCatching { ObdProtocol.valueOf(it) }.getOrNull() } ?: ObdProtocol.AUTO
     }
@@ -130,7 +138,9 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
         haUrl = haUrl.first(),
         webhookId = webhookId.first(),
         webhookIntervalSeconds = webhookIntervalSeconds.first(),
-        obdProtocol = obdProtocol.first()
+        obdProtocol = obdProtocol.first(),
+        engineRunningOnly = engineRunningOnly.first(),
+        haToken = haToken.first()
     )
 
     val cachedPids: Flow<Set<Int>> = dataStore.data.map { prefs ->

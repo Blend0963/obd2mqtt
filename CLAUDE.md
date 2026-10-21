@@ -54,6 +54,12 @@ ELM327 ──BT──► BluetoothTransport (Classic/BLE)
 
 **`ObdProtocol`** — ELM327 protocol numbers. Default `AUTO` (`ATSP0`) because the target car (Peugeot 407) exists in CAN and KWP2000 variants. Headers are off (`ATH0`) so KWP headers/checksums never mix with data bytes. Mode 22 scanning is skipped while `Mode22Registry.definitions` is empty.
 
+**Diagnostics** (`obd/Diagnostics.kt`, `obd/DtcDescriptions.kt`) — `DtcReader` reads PID 01 01 (MIL + readiness), Mode 03 (stored) and Mode 07 (pending) every 60 s in a coroutine alongside `PidPoller`; `ObdCommandExecutor.sendCommand` holds a `Mutex` so both share the adapter. `DtcParser` handles CAN (count byte, multi-frame `0:`/`1:` lines) and KWP (3 codes per line). Mode 04 clear requests come from the app, the MQTT `button`, or (webhook mode) an HA `input_button` read through the REST API with an optional long-lived token (`HaApiClient` + `ClearButtonWatcher`: only presses < 2 min old count). Requests go through `OBDCollectorService.requestClearFaults()` / `requestDiagnosticsRead()`.
+
+**Engine-off gate** — With `engineRunningOnly` (default), the service resets the adapter and reads `ATRV` before touching any ECU; below `ENGINE_RUNNING_VOLTAGE` (13.3 V) it throws `EngineOffException`, shows `WAITING_ENGINE` and rechecks every 5 min. A clear/read request wakes it and bypasses the gate once.
+
+**`HaEntities`** (`webhook/`) — Single source of HA names/entity IDs (sensors, diagnostics, `input_button`) used by the YAML package, the dashboard and the button poller.
+
 **Language** — UI strings, notifications, error messages and PID names (which become HA sensor names) are in French, hardcoded in Compose (no string resources).
 
 **`AppSettings`** — DataStore-backed settings. `snapshot()` returns a one-shot `AppConfig` for use in the service. PID caches are hex-encoded comma-separated strings. Fast PIDs default to `DEFAULT_FAST_PIDS`; until the user edits the selection, every other discovered PID is slow ("all data").

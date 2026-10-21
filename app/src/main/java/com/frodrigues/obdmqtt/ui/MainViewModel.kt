@@ -3,6 +3,8 @@ package com.frodrigues.obdmqtt.ui
 import android.app.Application
 import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
+import com.frodrigues.obdmqtt.obd.ClearResult
+import com.frodrigues.obdmqtt.obd.DiagnosticReport
 import com.frodrigues.obdmqtt.service.ConnectionStatus
 import com.frodrigues.obdmqtt.service.OBDCollectorService
 import com.frodrigues.obdmqtt.service.ServiceStatus
@@ -21,6 +23,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val serverStatus: StateFlow<ConnectionStatus> = OBDCollectorService.serverStatus
     val pidReadings: StateFlow<Map<Int, Double>> = OBDCollectorService.pidReadings
     val obdProtocolLabel: StateFlow<String> = OBDCollectorService.obdProtocolLabel
+    val diagnostics: StateFlow<DiagnosticReport?> = OBDCollectorService.diagnostics
+    val clearResult: StateFlow<ClearResult?> = OBDCollectorService.clearResult
+    val clearPending: StateFlow<Boolean> = OBDCollectorService.clearPending
+    val engineOffVoltage: StateFlow<Double?> = OBDCollectorService.engineOffVoltage
+
+    fun readDiagnostics() = OBDCollectorService.requestDiagnosticsRead()
+
+    fun clearFaults() = OBDCollectorService.requestClearFaults()
 
     fun startService() {
         val intent = Intent(getApplication(), OBDCollectorService::class.java).apply {

@@ -28,20 +28,34 @@ Dans l'application, ouvrez **Réglages** :
 6. Appuyez sur **Tester la connexion** : le message « ✓ Serveur joignable » doit s'afficher.
 7. **Scanner OBD2 → Protocole** : laissez **Automatique**. Selon la motorisation, la 407 utilise le CAN (ISO 15765-4) ou le KWP2000 (ISO 14230-4) ; l'application trouve le bon.
 8. Activez **Démarrage automatique** si le téléphone reste dans la voiture.
+9. Laissez **Lire seulement moteur tournant** activé (voir « Batterie » plus bas).
+10. *Facultatif* — **Jeton d'accès Home Assistant** : uniquement pour pouvoir effacer les défauts depuis Home Assistant (voir « Diagnostic »).
 
-Revenez à l'écran principal et appuyez sur **Démarrer**, contact mis. Au premier lancement, l'application interroge tous les PIDs pour savoir lesquels la 407 gère (de 30 secondes à quelques minutes ; l'avancement s'affiche dans la notification). Le résultat est mémorisé.
+Revenez à l'écran principal et appuyez sur **Démarrer**, **moteur tournant**. Au premier lancement, l'application interroge tous les PIDs pour savoir lesquels la 407 gère (de 30 secondes à quelques minutes ; l'avancement s'affiche dans la notification). Le résultat est mémorisé.
 
 L'écran principal affiche ensuite le protocole détecté et les mesures en direct.
 
 ## 3. Créer les capteurs dans Home Assistant
 
-1. Dans l'application : **Réglages → Webhook HTTPS → 1. Copier la configuration Home Assistant**.
-2. Collez le texte dans `configuration.yaml` (avec l'add-on *File editor* ou *Studio Code Server*).
-3. **Outils de développement → YAML → Entités de modèle** : cliquez sur **Recharger**.
+La configuration est un *package* Home Assistant : un fichier autonome, qui n'entre pas en conflit avec votre `configuration.yaml`.
 
-Un capteur est créé par mesure, par exemple `sensor.peugeot_407_regime_moteur` ou `sensor.peugeot_407_vitesse`. Ils se mettent à jour à chaque envoi et passent à « indisponible » quand la collecte s'arrête.
+1. Une seule fois, ajoutez ceci à `configuration.yaml` (avec l'add-on *File editor* ou *Studio Code Server*) :
+   ```yaml
+   homeassistant:
+     packages: !include_dir_named packages
+   ```
+   Si une ligne `homeassistant:` existe déjà, ajoutez seulement `packages: …` en dessous.
+2. Dans l'application : **Réglages → Webhook HTTPS → 1. Copier la configuration Home Assistant**.
+3. Créez le fichier `/config/packages/peugeot_407.yaml` (et le dossier `packages` s'il n'existe pas), collez le texte et enregistrez.
+4. **Paramètres → Système → Redémarrer** Home Assistant.
 
-> Recopiez la configuration après avoir changé la sélection des PIDs ou l'ID du webhook.
+Vous obtenez :
+- un capteur par mesure, par exemple `sensor.peugeot_407_regime_moteur` ou `sensor.peugeot_407_vitesse`, mis à jour à chaque envoi, et « indisponible » quand la collecte s'arrête ;
+- les capteurs de diagnostic (voyant moteur, codes défaut…), qui gardent la dernière valeur connue voiture garée ;
+- le bouton `input_button.peugeot_407_effacer_les_defauts` ;
+- une automatisation qui crée une notification quand un nouveau défaut apparaît.
+
+> Recopiez la configuration après avoir changé la sélection des PIDs, l'ID du webhook ou le jeton.
 
 ## 4. Créer le tableau de bord
 
@@ -49,9 +63,37 @@ Un capteur est créé par mesure, par exemple `sensor.peugeot_407_regime_moteur`
 2. Dans Home Assistant : **Paramètres → Tableaux de bord → Ajouter un tableau de bord → Nouveau tableau de bord à partir de zéro**, nommez-le « Peugeot 407 ».
 3. Ouvrez-le, puis **⋮ → Modifier le tableau de bord → ⋮ → Éditeur de configuration brute**, remplacez tout par le texte copié et enregistrez.
 
-Vous obtenez des jauges (régime, vitesse, température moteur, batterie, charge, papillon…), des courbes sur la dernière heure et la liste de toutes les mesures. Les cartes se modifient ensuite librement depuis l'éditeur visuel.
+Vous obtenez des jauges (régime, vitesse, température moteur, batterie, charge, papillon…), un bloc **Diagnostic moteur** (voyant, codes défaut avec leur description, bouton d'effacement si un jeton est configuré), des courbes sur la dernière heure et la liste de toutes les mesures. Les cartes se modifient ensuite librement depuis l'éditeur visuel.
 
 > Si vous renommez un capteur dans Home Assistant, son `entity_id` ne change pas, et le tableau de bord continue de fonctionner.
+
+## Diagnostic : défauts moteur
+
+L'application lit au démarrage puis chaque minute :
+- le **voyant moteur** (allumé / éteint) ;
+- les **codes défaut mémorisés**, par exemple `P0301` (« Ratés d'allumage cylindre 1 »), avec une description en français pour les codes génériques ;
+- les **codes en attente** : défauts détectés une fois mais pas encore confirmés, utiles pour voir venir une panne ;
+- les **tests antipollution** (catalyseur, sondes lambda, EGR…), terminés ou non : utile avant le contrôle technique.
+
+Tout est visible dans l'application (carte **Diagnostic moteur** de l'écran principal) et dans Home Assistant.
+
+**Effacer les défauts** (éteint le voyant) :
+- *Depuis l'application* : écran **Diagnostic moteur → Effacer les défauts**.
+- *Depuis Home Assistant* : bouton **Effacer les défauts** du tableau de bord. Il faut avoir renseigné un **jeton d'accès** dans l'application : dans HA, **Profil → Sécurité → Jetons d'accès longue durée → Créer un jeton**. Créez-le de préférence avec un utilisateur dédié, non administrateur : le jeton donne accès à l'API de Home Assistant. L'application ne s'en sert que pour lire l'état du bouton, toutes les 15 secondes.
+
+Dans les deux cas, **mettez le contact, moteur arrêté** : beaucoup de calculateurs refusent l'effacement moteur tournant. L'effacement passe outre la protection de la batterie pour cette seule demande. Une demande de plus de 2 minutes est ignorée, pour ne jamais effacer par surprise au démarrage suivant.
+
+> L'effacement ne répare rien : si le défaut est toujours là, le voyant se rallume. Il remet aussi les tests antipollution à zéro : évitez-le juste avant un contrôle technique.
+
+Seuls les défauts du **calculateur moteur** sont accessibles en OBD2. ABS/ESP, airbag, boîte automatique, BSI, FAP… nécessitent l'outil Peugeot (Diagbox). Pour les codes `P1xxx` (propres à Peugeot), l'application affiche le code, mais pas sa signification exacte.
+
+## Batterie : adaptateur laissé branché
+
+La prise OBD est alimentée en permanence. Avec **Lire seulement moteur tournant** (activé par défaut), l'application lit d'abord la tension batterie mesurée par l'adaptateur, ce qui ne réveille aucun calculateur :
+- **au-dessus de 13,3 V**, l'alternateur charge, donc le moteur tourne : l'application interroge la voiture ;
+- **en dessous**, elle ne l'interroge pas, affiche « Moteur arrêté » et revérifie toutes les 5 minutes.
+
+Les calculateurs (dont le BSI) peuvent ainsi se mettre en veille normalement voiture garée. Pour une immobilisation de plusieurs semaines, débranchez quand même l'adaptateur.
 
 ## Choisir les mesures et leur fréquence
 
@@ -73,6 +115,9 @@ Le niveau de carburant, le kilométrage, la température d'huile ou la consommat
 |---|---|
 | « Adaptateur ELM327 non détecté » | Adaptateur mal enfoncé, ou mauvais appareil Bluetooth sélectionné |
 | « Le calculateur ne répond pas (contact mis ?) » | Mettez le contact. Sinon, essayez un protocole forcé : CAN 11 bits 500 kbit/s, puis KWP2000 (init rapide) |
+| Reste sur « Moteur arrêté » alors que le moteur tourne | Batterie ou alternateur faibles (moins de 13,3 V moteur tournant) : désactivez **Lire seulement moteur tournant** et faites contrôler la charge |
+| « Refusé par le calculateur » à l'effacement | Coupez le moteur en laissant le contact, puis recommencez |
+| Le bouton HA n'efface rien | Jeton absent ou invalide dans l'application, ou bouton pressé voiture coupée depuis plus de 2 minutes |
 | « Service OBD BLE inconnu » | Version BLE non reconnue : signalez le modèle exact de l'adaptateur |
 | Home Assistant « Hors ligne », mais OBD2 « En ligne » | Pas de réseau, ou URL incorrecte. Les mesures reprennent dès le retour du réseau, sans couper le Bluetooth |
 | Capteurs « indisponible » dans HA | La collecte est arrêtée, ou la configuration n'a pas été rechargée (étape 3) |

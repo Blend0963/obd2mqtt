@@ -10,6 +10,8 @@ Android app that reads OBD2 data from a vehicle via an ELM327 Bluetooth adapter 
 - Automatic OBD protocol detection (CAN, KWP2000, ISO 9141) — or force one in Settings
 - Automatically scans all supported OBD2 PIDs (Mode 01), plus battery voltage read by the adapter (`AT RV`)
 - Polls every discovered PID by default: fast ones every second, the others spread over 10 s
+- **Engine diagnostics**: check-engine light, stored and pending fault codes (French descriptions), emission readiness tests; clear codes from the app or from a Home Assistant button
+- **Battery-safe**: only queries the car when the alternator charges (> 13.3 V via `AT RV`), so a parked car's ECUs are never woken up
 - Polls 39 mapped PIDs including RPM, speed, temperatures, fuel level, torque, and more
 - Publishes to **Home Assistant** via MQTT with auto-discovery — sensors appear automatically, no manual configuration needed
 - Or, for access over the internet, via an **HTTPS webhook** (no broker exposed to the WAN) — see [Webhook mode](#webhook-mode-https)

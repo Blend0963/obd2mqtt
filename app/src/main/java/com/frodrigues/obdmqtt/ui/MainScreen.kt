@@ -23,7 +23,8 @@ import java.util.*
 @Composable
 fun MainScreen(
     viewModel: MainViewModel,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onNavigateToDiagnostics: () -> Unit = {}
 ) {
     val serviceStatus by viewModel.serviceStatus.collectAsState()
     val pidCount by viewModel.activePidCount.collectAsState()
@@ -33,10 +34,13 @@ fun MainScreen(
     val publishMode by viewModel.settings.publishMode.collectAsState(initial = PublishMode.WEBHOOK)
     val pidReadings by viewModel.pidReadings.collectAsState()
     val obdProtocol by viewModel.obdProtocolLabel.collectAsState()
+    val diagnostics by viewModel.diagnostics.collectAsState()
+    val engineOffVoltage by viewModel.engineOffVoltage.collectAsState()
 
     val isRunning = serviceStatus == ServiceStatus.CONNECTED ||
                     serviceStatus == ServiceStatus.CONNECTING ||
-                    serviceStatus == ServiceStatus.RECONNECTING
+                    serviceStatus == ServiceStatus.RECONNECTING ||
+                    serviceStatus == ServiceStatus.WAITING_ENGINE
 
     val autoStart by viewModel.settings.autoStart.collectAsState(initial = false)
 
@@ -103,6 +107,69 @@ fun MainScreen(
                         status = serverStatus,
                         modifier = Modifier.weight(1f)
                     )
+                }
+
+                // ── Engine off: the ECU is left alone until the alternator charges ──
+                if (serviceStatus == ServiceStatus.WAITING_ENGINE) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        )
+                    ) {
+                        Text(
+                            text = "Moteur arrêté" +
+                                (engineOffVoltage?.let { " (%.1f V)".format(Locale.FRANCE, it) } ?: "") +
+                                " — l'application attend le démarrage pour ne pas réveiller la voiture.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                }
+
+                // ── Diagnostics summary ───────────────────────────────────────
+                ElevatedCard(
+                    onClick = onNavigateToDiagnostics,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val faultCount = diagnostics?.codes?.size ?: 0
+                    val milOn = diagnostics?.milOn == true
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = "Diagnostic moteur",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = when {
+                                    diagnostics == null -> "Pas encore lu"
+                                    faultCount == 0 -> "Aucun défaut"
+                                    faultCount == 1 -> "1 défaut"
+                                    else -> "$faultCount défauts"
+                                },
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (faultCount > 0 || milOn) MaterialTheme.colorScheme.error
+                                        else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        if (milOn) {
+                            Text(
+                                text = "Voyant moteur allumé",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
                 }
 
                 // ── Active PIDs summary card ──────────────────────────────────

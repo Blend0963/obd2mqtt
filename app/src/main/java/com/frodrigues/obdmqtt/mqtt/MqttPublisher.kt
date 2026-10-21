@@ -53,6 +53,17 @@ class MqttPublisher(private val config: AppConfig) {
             .get()
     }
 
+    /** Calls [onMessage] for every message received on [topic]. */
+    suspend fun subscribe(topic: String, onMessage: (String) -> Unit) = withContext(Dispatchers.IO) {
+        val c = client ?: throw IllegalStateException("Not connected")
+        c.subscribeWith()
+            .topicFilter(topic)
+            .qos(MqttQos.AT_LEAST_ONCE)
+            .callback { publish -> onMessage(Charsets.UTF_8.decode(publish.payload.orElse(java.nio.ByteBuffer.allocate(0))).toString()) }
+            .send()
+            .get()
+    }
+
     suspend fun disconnect() = withContext(Dispatchers.IO) {
         runCatching { client?.disconnect()?.get() }
         client = null
