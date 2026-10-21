@@ -8,7 +8,7 @@ Android app (Kotlin + Jetpack Compose) that reads OBD2 data from a vehicle via a
 
 - **Package**: `com.frodrigues.obdmqtt`
 - **minSdk**: 26 (Android 8+). Car head units often display a fake "Android 13" over Android 10/11 (e.g. Unisoc UIS7862, kernel 4.14), so API 31/33 calls are version-gated (BLE write/notify, runtime permissions, clipboard)
-- **Protocol confirmed working on**: Jaecoo 7 / OMODA platform (ISO 15765-4 CAN, 11-bit, 500 kbaud)
+- **Protocol confirmed working on**: Jaecoo 7 / OMODA platform (ISO 15765-4 CAN, 11-bit, 500 kbaud); Peugeot 407 + Vgate iCar Pro (ELM327 v2.3) — ISO 14230-4 KWP2000 fast init (`ATSP5`), the adapter's auto search (`ATSP0`) fails on it
 
 ## Build Commands
 
