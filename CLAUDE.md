@@ -54,6 +54,10 @@ ELM327 ──BT──► BluetoothTransport (Classic/BLE)
 
 **`AppSettings`** — DataStore-backed settings. `snapshot()` returns a one-shot `AppConfig` for use in the service. PID caches are hex-encoded comma-separated strings. `selectedPids = null` means "publish all discovered PIDs".
 
+**`TelemetrySink`** (`service/`) — Where readings go, chosen by `AppConfig.publishMode`. `MqttSink` wraps `MqttPublisher` + HA Discovery; `WebhookSink` POSTs the latest snapshot every `webhookIntervalSeconds` from a background loop (failures only flip `serverStatus`, never the BT session).
+
+**`webhook/`** — `WebhookPublisher` (HTTPS POST to `<haUrl>/api/webhook/<id>`, URL validated by `buildWebhookUrl`, which rejects non-HTTPS), `WebhookPayload` (JSON bodies, PIDs keyed by hex), `HaWebhookYaml` (generates the HA trigger-based template sensors YAML copied from Settings).
+
 **`HaDiscoveryPublisher`** — Publishes retained MQTT configs to `homeassistant/sensor/obd2_<mac>/<PID>/config`. State values go to `obd2/<mac>/<PID>/state`.
 
 ### MQTT Topics
@@ -64,6 +68,8 @@ ELM327 ──BT──► BluetoothTransport (Classic/BLE)
 | `obd2/<mac>/<PID>/state` | Sensor value (retained) |
 | `homeassistant/sensor/obd2_<mac>/m22_<PID>/config` | Mode 22 Discovery config (retained) |
 | `obd2/<mac>/m22_<PID>/state` | Mode 22 sensor value (retained) |
+
+Webhook payload: `{"available":true,"ts":<ms>,"device":"<name>","pids":{"0C":850,...}}`; `{"available":false,...,"pids":{}}` on disconnect; `{"test":true}` for the connection test (ignored by the HA template condition).
 
 MAC in topics = BT address with colons removed (e.g. `AA:BB:CC:DD:EE:FF` → `AABBCCDDEEFF`).
 

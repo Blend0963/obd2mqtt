@@ -3,6 +3,7 @@ package com.frodrigues.obdmqtt.mqtt
 import com.frodrigues.obdmqtt.obd.PidDefinition
 import com.frodrigues.obdmqtt.obd.PidRegistry
 import com.frodrigues.obdmqtt.settings.AppConfig
+import com.frodrigues.obdmqtt.util.jsonString
 
 class HaDiscoveryPublisher(
     private val publish: suspend (topic: String, payload: String) -> Unit,
@@ -18,15 +19,6 @@ class HaDiscoveryPublisher(
             publish(topic, payload)
         }
     }
-
-    private fun String.jsonEscape(): String =
-        replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-            .replace("\t", "\\t")
-
-    private fun jsonString(value: String): String = "\"${value.jsonEscape()}\""
 
     private fun buildPayload(def: PidDefinition, mac: String, pidHex: String): String {
         val deviceClassEntry = def.haDeviceClass

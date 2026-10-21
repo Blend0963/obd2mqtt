@@ -8,6 +8,7 @@ Android app that reads OBD2 data from a vehicle via an ELM327 Bluetooth adapter 
 - Automatically scans all supported OBD2 PIDs (Mode 01)
 - Polls 39 mapped PIDs including RPM, speed, temperatures, fuel level, torque, and more
 - Publishes to **Home Assistant** via MQTT with auto-discovery — sensors appear automatically, no manual configuration needed
+- Or, for access over the internet, via an **HTTPS webhook** (no broker exposed to the WAN) — see [Webhook mode](#webhook-mode-https)
 - Runs as a persistent **ForegroundService** with exponential backoff reconnection (5s → 10s → 30s → 60s)
 - Configurable poll interval (default: 5 seconds)
 - Marks sensors `unavailable` in HA when the car disconnects
@@ -17,7 +18,7 @@ Android app that reads OBD2 data from a vehicle via an ELM327 Bluetooth adapter 
 - Android 13+ (minSdk 33)
 - ELM327 OBD2 Bluetooth adapter (Classic or BLE)
 - Vehicle using ISO 15765-4 CAN protocol (11-bit ID, 500 kbaud) — confirmed working on Jaecoo 7 / OMODA platform
-- MQTT broker (e.g. Mosquitto running alongside Home Assistant)
+- MQTT broker (e.g. Mosquitto running alongside Home Assistant) **or** Home Assistant reachable over HTTPS (webhook mode)
 
 ## Setup
 
@@ -29,6 +30,33 @@ Android app that reads OBD2 data from a vehicle via an ELM327 Bluetooth adapter 
 6. Tap **Start** on the main screen
 
 The app will connect to the adapter, initialize ELM327, scan supported PIDs, and start publishing to MQTT. Home Assistant will auto-create a device with all supported sensors.
+
+## Webhook mode (HTTPS)
+
+When the phone reaches Home Assistant over the internet (mobile data in the car), exposing an MQTT broker is risky. Webhook mode instead POSTs readings to a [Home Assistant webhook trigger](https://www.home-assistant.io/docs/automation/trigger/#webhook-trigger):
+
+```
+POST https://<your-ha>/api/webhook/<webhook-id>
+{"available":true,"ts":1729500000000,"device":"Jaecoo 7","pids":{"0C":850,"0D":42}}
+```
+
+**Security**
+
+- HTTPS only — `http://` URLs are rejected; the certificate must be valid (Let's Encrypt, Nabu Casa, reverse proxy…)
+- The webhook ID is a 256-bit random secret generated in the app; it is the only credential, so keep it private (it's masked in the UI and copied to the clipboard as sensitive)
+- POST only; HTTP redirects are never followed, so the payload can't be bounced to another host
+- Rotate it any time with **New ID**, then re-copy the YAML into HA
+
+**Setup**
+
+1. Settings → **Home Assistant Connection** → **Webhook HTTPS**
+2. Enter your external HA URL (e.g. `https://ha.example.com` or `https://xxxx.ui.nabu.casa`) and tap **Test Connection**
+3. Start the service once so PIDs are discovered, choose the PIDs to poll, then tap **Copy Home Assistant YAML**
+4. Paste it into `configuration.yaml` (or a file under `/config/packages/`) and reload **Template entities** in Developer tools → YAML
+
+The YAML defines trigger-based template sensors (one per polled PID, with `unique_id`, unit, `device_class` and `state_class`). Each request carries the full snapshot of current values, sent at most every *Send interval* seconds (default 5), so a lost request in a tunnel is simply replaced by the next one; a failing network never interrupts the Bluetooth session. On disconnect, an `{"available":false}` payload marks the sensors `unavailable`.
+
+> HA always answers `200 OK` on `/api/webhook/…`, even for an unknown ID, so **Test Connection** proves reachability and TLS, not that the YAML is loaded.
 
 ## MQTT Topics
 

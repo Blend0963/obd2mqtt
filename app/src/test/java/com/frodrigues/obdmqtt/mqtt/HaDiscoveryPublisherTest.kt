@@ -13,7 +13,6 @@ class HaDiscoveryPublisherTest {
         mqttPort = 1883,
         mqttUser = "",
         mqttPassword = "",
-        pollIntervalSeconds = 5,
         deviceName = "Test Car",
         deviceModel = "Model X",
         deviceManufacturer = "Maker"

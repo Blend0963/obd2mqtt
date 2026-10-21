@@ -18,6 +18,9 @@ fun syncAutoStartToDeStorage(context: Context, enabled: Boolean) {
         .apply()
 }
 
+/** How readings reach Home Assistant. */
+enum class PublishMode { MQTT, WEBHOOK }
+
 data class AppConfig(
     val btDeviceMac: String,
     val mqttHost: String,
@@ -26,7 +29,11 @@ data class AppConfig(
     val mqttPassword: String,
     val deviceName: String,
     val deviceModel: String,
-    val deviceManufacturer: String
+    val deviceManufacturer: String,
+    val publishMode: PublishMode = PublishMode.MQTT,
+    val haUrl: String = "",
+    val webhookId: String = "",
+    val webhookIntervalSeconds: Int = AppSettings.DEFAULT_WEBHOOK_INTERVAL_SECONDS
 ) {
     val mqttClientId: String get() = "obd2_android_${btDeviceMac.replace(":", "")}"
 }
@@ -53,6 +60,13 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
         // Mode 22 PID discovery cache — key:hex PID (4 chars), value:hex bytes
         val CACHED_MODE22_PIDS = stringPreferencesKey("cachedMode22Pids")
         val AUTO_START = booleanPreferencesKey("autoStart")
+        // Webhook (HTTPS) publishing — alternative to MQTT for WAN setups
+        val PUBLISH_MODE = stringPreferencesKey("publishMode")
+        val HA_URL = stringPreferencesKey("haUrl")
+        val WEBHOOK_ID = stringPreferencesKey("webhookId")
+        val WEBHOOK_INTERVAL = intPreferencesKey("webhookIntervalSeconds")
+
+        const val DEFAULT_WEBHOOK_INTERVAL_SECONDS = 5
 
         // Default PID sets — applied on first launch and after update from old binary model
         val DEFAULT_FAST_PIDS: Set<Int> = setOf(0x0C, 0x0D, 0x42, 0x5E) // RPM, Speed, Voltage, Fuel Rate
@@ -84,6 +98,14 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
     val deviceName: Flow<String> = dataStore.data.map { it[DEVICE_NAME] ?: "Jaecoo 7" }
     val deviceModel: Flow<String> = dataStore.data.map { it[DEVICE_MODEL] ?: "Jaecoo 7" }
     val deviceManufacturer: Flow<String> = dataStore.data.map { it[DEVICE_MANUFACTURER] ?: "Jaecoo" }
+    val publishMode: Flow<PublishMode> = dataStore.data.map { prefs ->
+        prefs[PUBLISH_MODE]?.let { runCatching { PublishMode.valueOf(it) }.getOrNull() } ?: PublishMode.MQTT
+    }
+    val haUrl: Flow<String> = dataStore.data.map { it[HA_URL] ?: "" }
+    val webhookId: Flow<String> = dataStore.data.map { it[WEBHOOK_ID] ?: "" }
+    val webhookIntervalSeconds: Flow<Int> = dataStore.data.map {
+        it[WEBHOOK_INTERVAL] ?: DEFAULT_WEBHOOK_INTERVAL_SECONDS
+    }
 
     suspend fun snapshot(): AppConfig = AppConfig(
         btDeviceMac = btDeviceMac.first(),
@@ -93,7 +115,11 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
         mqttPassword = mqttPassword.first(),
         deviceName = deviceName.first(),
         deviceModel = deviceModel.first(),
-        deviceManufacturer = deviceManufacturer.first()
+        deviceManufacturer = deviceManufacturer.first(),
+        publishMode = publishMode.first(),
+        haUrl = haUrl.first(),
+        webhookId = webhookId.first(),
+        webhookIntervalSeconds = webhookIntervalSeconds.first()
     )
 
     val cachedPids: Flow<Set<Int>> = dataStore.data.map { prefs ->

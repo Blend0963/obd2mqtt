@@ -2,7 +2,12 @@ package com.frodrigues.obdmqtt.ui
 
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
+import android.content.ClipData
+import android.content.ClipDescription
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
+import android.os.PersistableBundle
 import android.provider.Settings as AndroidSettings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -27,7 +32,12 @@ import androidx.compose.ui.unit.dp
 import com.frodrigues.obdmqtt.mqtt.testMqttConnection
 import com.frodrigues.obdmqtt.settings.AppConfig
 import com.frodrigues.obdmqtt.settings.AppSettings
+import com.frodrigues.obdmqtt.settings.PublishMode
 import com.frodrigues.obdmqtt.settings.syncAutoStartToDeStorage
+import com.frodrigues.obdmqtt.webhook.HaWebhookYaml
+import com.frodrigues.obdmqtt.webhook.buildWebhookUrl
+import com.frodrigues.obdmqtt.webhook.generateWebhookId
+import com.frodrigues.obdmqtt.webhook.testWebhookConnection
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,6 +53,7 @@ fun SettingsScreen(
 
     val btMac by settings.btDeviceMac.collectAsState(initial = "")
     val autoStart by settings.autoStart.collectAsState(initial = false)
+    val publishMode by settings.publishMode.collectAsState(initial = PublishMode.MQTT)
 
     // Local text field state — avoids cursor-jump bug from DataStore re-emission
     var localHost by rememberSaveable { mutableStateOf("") }
@@ -52,6 +63,11 @@ fun SettingsScreen(
     var localDeviceName by rememberSaveable { mutableStateOf("") }
     var localDeviceModel by rememberSaveable { mutableStateOf("") }
     var localDeviceManufacturer by rememberSaveable { mutableStateOf("") }
+    var localHaUrl by rememberSaveable { mutableStateOf("") }
+    var localWebhookId by rememberSaveable { mutableStateOf("") }
+    var localWebhookInterval by rememberSaveable {
+        mutableStateOf(AppSettings.DEFAULT_WEBHOOK_INTERVAL_SECONDS.toString())
+    }
     var fieldsInitialized by rememberSaveable { mutableStateOf(false) }
 
     // Initialise once from DataStore
@@ -65,6 +81,9 @@ fun SettingsScreen(
             localDeviceName = snap.deviceName
             localDeviceModel = snap.deviceModel
             localDeviceManufacturer = snap.deviceManufacturer
+            localHaUrl = snap.haUrl
+            localWebhookId = snap.webhookId
+            localWebhookInterval = snap.webhookIntervalSeconds.toString()
             fieldsInitialized = true
         }
     }
@@ -88,9 +107,37 @@ fun SettingsScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // MQTT test state
+    fun currentConfig() = AppConfig(
+        btDeviceMac = btMac,
+        mqttHost = localHost,
+        mqttPort = localPort.toIntOrNull() ?: 1883,
+        mqttUser = localUser,
+        mqttPassword = localPassword,
+        deviceName = localDeviceName,
+        deviceModel = localDeviceModel,
+        deviceManufacturer = localDeviceManufacturer,
+        publishMode = publishMode,
+        haUrl = localHaUrl,
+        webhookId = localWebhookId,
+        webhookIntervalSeconds = localWebhookInterval.toIntOrNull()
+            ?: AppSettings.DEFAULT_WEBHOOK_INTERVAL_SECONDS
+    )
+
+    fun saveWebhookId(id: String) {
+        localWebhookId = id
+        scope.launch { settings.update { this[AppSettings.WEBHOOK_ID] = id } }
+    }
+
+    // MQTT / webhook test state
     var mqttTesting by remember { mutableStateOf(false) }
     var mqttTestResult by remember { mutableStateOf<Result<Unit>?>(null) }
+    var webhookTesting by remember { mutableStateOf(false) }
+    var webhookTestResult by remember { mutableStateOf<Result<Unit>?>(null) }
+
+    // PIDs the service actually polls — these get a sensor in the generated HA YAML
+    val cachedPids by settings.cachedPids.collectAsState(initial = emptySet())
+    val selectedFastPids by settings.fastPids.collectAsState(initial = emptySet())
+    val selectedSlowPids by settings.slowPids.collectAsState(initial = emptySet())
 
     // BT device dialog
     if (showDeviceDialog) {
@@ -238,8 +285,166 @@ fun SettingsScreen(
                 }
             }
 
+            // ── Publish mode ──────────────────────────────────────────────────
+            SettingsSection(header = { SectionLabel("Home Assistant Connection") }) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val modes = listOf(PublishMode.MQTT to "MQTT (LAN)", PublishMode.WEBHOOK to "Webhook HTTPS")
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        modes.forEachIndexed { index, (mode, label) ->
+                            SegmentedButton(
+                                selected = publishMode == mode,
+                                onClick = {
+                                    scope.launch { settings.update { this[AppSettings.PUBLISH_MODE] = mode.name } }
+                                    if (mode == PublishMode.WEBHOOK && localWebhookId.isBlank()) {
+                                        saveWebhookId(generateWebhookId())
+                                    }
+                                },
+                                shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size)
+                            ) { Text(label) }
+                        }
+                    }
+                    Text(
+                        text = if (publishMode == PublishMode.WEBHOOK)
+                            "Readings are POSTed over HTTPS to a Home Assistant webhook — suited to access over the internet."
+                        else
+                            "Readings are published to an MQTT broker with HA auto-discovery — best on the local network.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // ── Webhook ───────────────────────────────────────────────────────
+            if (publishMode == PublishMode.WEBHOOK) SettingsSection(header = { SectionLabel("Webhook (HTTPS)") }) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    val urlError = remember(localHaUrl, localWebhookId) {
+                        if (localHaUrl.isBlank()) null
+                        else runCatching { buildWebhookUrl(localHaUrl, localWebhookId) }.exceptionOrNull()?.message
+                    }
+                    OutlinedTextField(
+                        value = localHaUrl,
+                        onValueChange = { localHaUrl = it
+                            scope.launch { settings.update { this[AppSettings.HA_URL] = it.trim() } }
+                        },
+                        label = { Text("Home Assistant URL") },
+                        placeholder = { Text("https://ha.example.com") },
+                        supportingText = { Text(urlError ?: "External HTTPS URL (valid certificate required)") },
+                        isError = urlError != null,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = localWebhookId,
+                        onValueChange = { saveWebhookId(it.trim()) },
+                        label = { Text("Webhook ID (secret)") },
+                        supportingText = { Text("Random 256-bit ID — acts as the password") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { saveWebhookId(generateWebhookId()) }) {
+                            Text("New ID")
+                        }
+                        OutlinedButton(
+                            onClick = { copyToClipboard(context, "Webhook ID", localWebhookId) },
+                            enabled = localWebhookId.isNotBlank()
+                        ) {
+                            Text("Copy ID")
+                        }
+                    }
+                    OutlinedTextField(
+                        value = localWebhookInterval,
+                        onValueChange = { v ->
+                            localWebhookInterval = v
+                            v.toIntOrNull()?.takeIf { it >= 1 }?.let { seconds ->
+                                scope.launch { settings.update { this[AppSettings.WEBHOOK_INTERVAL] = seconds } }
+                            }
+                        },
+                        label = { Text("Send interval (s)") },
+                        supportingText = { Text("Latest values are sent at most this often (default: 5)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                webhookTesting = true
+                                webhookTestResult = null
+                                val config = currentConfig()
+                                scope.launch {
+                                    webhookTestResult = testWebhookConnection(config)
+                                    webhookTesting = false
+                                }
+                            },
+                            enabled = !webhookTesting && localHaUrl.isNotBlank() && urlError == null
+                        ) {
+                            if (webhookTesting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text("Testing…")
+                            } else {
+                                Text("Test Connection")
+                            }
+                        }
+
+                        webhookTestResult?.let { result ->
+                            if (result.isSuccess) {
+                                Text(
+                                    text = "✓ Reachable",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            } else {
+                                Text(
+                                    text = "✗ Failed: ${result.exceptionOrNull()?.message?.take(40)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Text(
+                        text = "Home Assistant needs a matching configuration. Copy the generated YAML " +
+                               "into configuration.yaml, then reload template entities. Regenerate it " +
+                               "after changing the PID selection or the webhook ID.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            val polled = selectedFastPids + selectedSlowPids
+                            val pids = if (cachedPids.isEmpty()) polled else polled.intersect(cachedPids)
+                            copyToClipboard(context, "HA YAML", HaWebhookYaml.generate(currentConfig(), pids))
+                        },
+                        enabled = localWebhookId.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Copy Home Assistant YAML")
+                    }
+                }
+            }
+
             // ── MQTT Broker ───────────────────────────────────────────────────
-            SettingsSection(header = { SectionLabel("MQTT Broker") }) {
+            if (publishMode == PublishMode.MQTT) SettingsSection(header = { SectionLabel("MQTT Broker") }) {
                 Column(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -308,16 +513,7 @@ fun SettingsScreen(
                             onClick = {
                                 mqttTesting = true
                                 mqttTestResult = null
-                                val config = AppConfig(
-                                    btDeviceMac = btMac,
-                                    mqttHost = localHost,
-                                    mqttPort = localPort.toIntOrNull() ?: 1883,
-                                    mqttUser = localUser,
-                                    mqttPassword = localPassword,
-                                    deviceName = localDeviceName,
-                                    deviceModel = localDeviceModel,
-                                    deviceManufacturer = localDeviceManufacturer
-                                )
+                                val config = currentConfig()
                                 scope.launch {
                                     mqttTestResult = testMqttConnection(config)
                                     mqttTesting = false
@@ -461,7 +657,6 @@ fun SettingsScreen(
                 ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
-                val cachedPids by settings.cachedPids.collectAsState(initial = emptySet())
                 val fastPids by settings.fastPids.collectAsState(initial = emptySet())
                 val slowPids by settings.slowPids.collectAsState(initial = emptySet())
                 val totalCount = cachedPids.size
@@ -533,6 +728,16 @@ fun SettingsScreen(
             Spacer(Modifier.height(24.dp))
         }
     }
+}
+
+/** Copies [text] flagged as sensitive, so Android hides it from the clipboard preview (API 33+ shows its own confirmation). */
+private fun copyToClipboard(context: Context, label: String, text: String) {
+    val clip = ClipData.newPlainText(label, text).apply {
+        description.extras = PersistableBundle().apply {
+            putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+        }
+    }
+    context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
 }
 
 @Composable

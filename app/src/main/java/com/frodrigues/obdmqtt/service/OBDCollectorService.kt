@@ -14,15 +14,14 @@ import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.frodrigues.obdmqtt.MainActivity
 import com.frodrigues.obdmqtt.bluetooth.BluetoothTransportFactory
-import com.frodrigues.obdmqtt.mqtt.HaDiscoveryPublisher
-import com.frodrigues.obdmqtt.mqtt.MqttPublisher
-import com.frodrigues.obdmqtt.obd.Mode22Registry
 import com.frodrigues.obdmqtt.obd.Mode22Scanner
 import com.frodrigues.obdmqtt.obd.ObdCommandExecutor
 import com.frodrigues.obdmqtt.obd.PidPoller
 import com.frodrigues.obdmqtt.obd.PidScanner
 import com.frodrigues.obdmqtt.settings.AppSettings
+import com.frodrigues.obdmqtt.settings.PublishMode
 import com.frodrigues.obdmqtt.settings.dataStore
+import com.frodrigues.obdmqtt.webhook.buildWebhookUrl
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -41,8 +40,6 @@ class OBDCollectorService : LifecycleService() {
     private lateinit var settings: AppSettings
     private var wakeLock: PowerManager.WakeLock? = null
     private var collectorJob: Job? = null
-    private var currentStateTopics: List<String> = emptyList()
-    @Volatile private var mqttPublisherRef: MqttPublisher? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -50,7 +47,7 @@ class OBDCollectorService : LifecycleService() {
         activePidCount.value = 0
         lastUpdateTime.value = 0L
         btStatus.value = ConnectionStatus.DISCONNECTED
-        mqttStatus.value = ConnectionStatus.DISCONNECTED
+        serverStatus.value = ConnectionStatus.DISCONNECTED
         pidReadings.value = emptyMap()
         settings = AppSettings(applicationContext.dataStore)
         createNotificationChannel()
@@ -98,7 +95,7 @@ class OBDCollectorService : LifecycleService() {
             } catch (e: Exception) {
                 status.value = ServiceStatus.RECONNECTING
                 btStatus.value = ConnectionStatus.DISCONNECTED
-                mqttStatus.value = ConnectionStatus.DISCONNECTED
+                serverStatus.value = ConnectionStatus.DISCONNECTED
                 val delay = backoffMs.getOrElse(attempt) { 60_000L }
                 attempt = minOf(attempt + 1, backoffMs.lastIndex)
                 updateNotification("Reconnecting in ${delay / 1000}s...")
@@ -110,7 +107,11 @@ class OBDCollectorService : LifecycleService() {
     private suspend fun collect() {
         val config = settings.snapshot()
         if (config.btDeviceMac.isBlank()) throw IllegalStateException("No BT device configured")
-        if (config.mqttHost.isBlank()) throw IllegalStateException("No MQTT host configured")
+        when (config.publishMode) {
+            PublishMode.MQTT ->
+                if (config.mqttHost.isBlank()) throw IllegalStateException("No MQTT host configured")
+            PublishMode.WEBHOOK -> buildWebhookUrl(config.haUrl, config.webhookId)  // throws if invalid
+        }
 
         status.value = ServiceStatus.CONNECTING
         btStatus.value = ConnectionStatus.CONNECTING
@@ -123,6 +124,7 @@ class OBDCollectorService : LifecycleService() {
         val transport = BluetoothTransportFactory.create(device, applicationContext)
         transport.connect()
 
+        val sink = TelemetrySink.create(config) { serverStatus.value = it }
         try {
             updateNotification("Initializing ELM327...")
             val executor = ObdCommandExecutor(transport)
@@ -139,79 +141,48 @@ class OBDCollectorService : LifecycleService() {
             activePidCount.value = supportedPids.size
             btStatus.value = ConnectionStatus.CONNECTED
 
-            mqttStatus.value = ConnectionStatus.CONNECTING
-            updateNotification("Connecting to MQTT...")
-            val mqttPublisher = MqttPublisher(config)
-            mqttPublisher.connect()
-            mqttStatus.value = ConnectionStatus.CONNECTED
-            mqttPublisherRef = mqttPublisher
+            updateNotification("Scanning Mode 22 PIDs...")
+            val mode22Pids = Mode22Scanner(
+                executor = executor,
+                settings = settings,
+                onProgress = { scanned, total ->
+                    updateNotification("Scanning Mode 22 ($scanned/$total)...")
+                }
+            ).scan()
 
             val mac = device.address.replace(":", "")
-            currentStateTopics = supportedPids.map { pid ->
-                "obd2/$mac/${pid.toString(16).padStart(2, '0').uppercase()}/state"
+            coroutineScope {
+                updateNotification(
+                    if (config.publishMode == PublishMode.WEBHOOK) "Starting webhook..." else "Connecting to MQTT..."
+                )
+                sink.start(this, mac, supportedPids, mode22Pids.keys)
+
+                status.value = ServiceStatus.CONNECTED
+                updateNotification("Connected — ${supportedPids.size} M01 + ${mode22Pids.size} M22 PIDs")
+
+                val activeFast = supportedPids.intersect(settings.fastPids.first())
+                val activeSlow = supportedPids.intersect(settings.slowPids.first())
+
+                updateNotification("Connected — ${activeFast.size} fast (${PidPoller.FAST_INTERVAL_SECONDS}s) + ${activeSlow.size} slow (${PidPoller.SLOW_INTERVAL_SECONDS}s)")
+
+                val currentReadings = mutableMapOf<Int, Double>()
+
+                PidPoller(executor = executor, fastPids = activeFast, slowPids = activeSlow).readings().collect { reading ->
+                    currentReadings[reading.pid] = reading.value
+                    val snapshot = currentReadings.toMap()
+                    pidReadings.value = snapshot
+                    sink.publish(reading, snapshot)
+                    lastUpdateTime.value = reading.timestamp
+                }
+                coroutineContext.cancelChildren()  // stop sink background work if polling ever ends
             }
-
-            HaDiscoveryPublisher(
-                publish = { t, p -> mqttPublisher.publish(t, p, retain = true) },
-                config = config
-            ).publishDiscovery(supportedPids, mac)
-
-            // ── Mode 22 scan ─────────────────────────────────────────────────────
-            updateNotification("Scanning Mode 22 PIDs...")
-        val mode22Pids = Mode22Scanner(
-            executor = executor,
-            settings = settings,
-            onProgress = { scanned, total ->
-                updateNotification("Scanning Mode 22 ($scanned/$total)...")
-            }
-        ).scan()
-
-        // Publish Mode 22 HA Discovery
-        mode22Pids.keys.forEach { pid ->
-            val def = Mode22Registry.getOrUnknown(pid)
-            val pidHex = pid.toString(16).padStart(4, '0').uppercase()
-            val topic = "homeassistant/sensor/obd2_${mac}/m22_$pidHex/config"
-            val stateTopic = "obd2/$mac/m22_$pidHex/state"
-            val payload = buildString {
-                append("{")
-                append("\"name\":\"${config.deviceName} ${def.name}\"")
-                append(",\"state_topic\":\"$stateTopic\"")
-                if (def.unit.isNotBlank()) append(",\"unit_of_measurement\":\"${def.unit}\"")
-                append(",\"unique_id\":\"${mac}_m22_$pidHex\"")
-                def.haDeviceClass?.let { append(",\"device_class\":\"$it\"") }
-                append(",\"device\":{\"identifiers\":[\"obd2_$mac\"],\"name\":\"${config.deviceName}\"}")
-                append("}")
-            }
-            mqttPublisher.publish(topic, payload, retain = true)
-        }
-
-        status.value = ServiceStatus.CONNECTED
-        updateNotification("Connected — ${supportedPids.size} M01 + ${mode22Pids.size} M22 PIDs")
-
-        val activeFast = supportedPids.intersect(settings.fastPids.first())
-        val activeSlow = supportedPids.intersect(settings.slowPids.first())
-
-        updateNotification("Connected — ${activeFast.size} fast (${PidPoller.FAST_INTERVAL_SECONDS}s) + ${activeSlow.size} slow (${PidPoller.SLOW_INTERVAL_SECONDS}s)")
-
-        val currentReadings = mutableMapOf<Int, Double>()
-
-        PidPoller(executor = executor, fastPids = activeFast, slowPids = activeSlow).readings().collect { reading ->
-            currentReadings[reading.pid] = reading.value
-            pidReadings.value = currentReadings.toMap()
-            val pidHex = reading.pid.toString(16).padStart(2, '0').uppercase()
-            val value = reading.value.toBigDecimal().stripTrailingZeros().toPlainString()
-            mqttPublisher.publish("obd2/$mac/$pidHex/state", value, retain = true)
-            lastUpdateTime.value = reading.timestamp
-        }
         } finally {
             withContext(NonCancellable) {
-                publishUnavailable()
-                mqttPublisherRef?.disconnect()
-                mqttPublisherRef = null
+                sink.stop()
                 transport.disconnect()
             }
             btStatus.value = ConnectionStatus.DISCONNECTED
-            mqttStatus.value = ConnectionStatus.DISCONNECTED
+            serverStatus.value = ConnectionStatus.DISCONNECTED
             pidReadings.value = emptyMap()
         }
     }
@@ -222,7 +193,7 @@ class OBDCollectorService : LifecycleService() {
         job.invokeOnCompletion {
             status.value = ServiceStatus.IDLE
             btStatus.value = ConnectionStatus.DISCONNECTED
-            mqttStatus.value = ConnectionStatus.DISCONNECTED
+            serverStatus.value = ConnectionStatus.DISCONNECTED
             pidReadings.value = emptyMap()
         }
         job.cancel()
@@ -239,13 +210,6 @@ class OBDCollectorService : LifecycleService() {
     override fun onDestroy() {
         releaseWakeLock()
         super.onDestroy()
-    }
-
-    private suspend fun publishUnavailable() {
-        val mqtt = mqttPublisherRef ?: return
-        currentStateTopics.forEach { topic ->
-            runCatching { mqtt.publishEmpty(topic) }
-        }
     }
 
     private fun createNotificationChannel() {
@@ -287,7 +251,7 @@ class OBDCollectorService : LifecycleService() {
         val activePidCount = MutableStateFlow(0)
         val lastUpdateTime = MutableStateFlow(0L)
         val btStatus = MutableStateFlow(ConnectionStatus.DISCONNECTED)
-        val mqttStatus = MutableStateFlow(ConnectionStatus.DISCONNECTED)
+        val serverStatus = MutableStateFlow(ConnectionStatus.DISCONNECTED)
         val pidReadings = MutableStateFlow<Map<Int, Double>>(emptyMap())
     }
 }

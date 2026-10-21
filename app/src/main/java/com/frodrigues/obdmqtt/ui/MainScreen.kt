@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import com.frodrigues.obdmqtt.obd.PidRegistry
 import com.frodrigues.obdmqtt.service.ConnectionStatus
 import com.frodrigues.obdmqtt.service.ServiceStatus
+import com.frodrigues.obdmqtt.settings.PublishMode
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -28,7 +29,8 @@ fun MainScreen(
     val pidCount by viewModel.activePidCount.collectAsState()
     val lastUpdate by viewModel.lastUpdateTime.collectAsState()
     val btStatus by viewModel.btStatus.collectAsState()
-    val mqttStatus by viewModel.mqttStatus.collectAsState()
+    val serverStatus by viewModel.serverStatus.collectAsState()
+    val publishMode by viewModel.settings.publishMode.collectAsState(initial = PublishMode.MQTT)
     val pidReadings by viewModel.pidReadings.collectAsState()
 
     val isRunning = serviceStatus == ServiceStatus.CONNECTED ||
@@ -96,8 +98,8 @@ fun MainScreen(
                         modifier = Modifier.weight(1f)
                     )
                     ConnectionCard(
-                        label = "MQTT Broker",
-                        status = mqttStatus,
+                        label = if (publishMode == PublishMode.WEBHOOK) "HA Webhook" else "MQTT Broker",
+                        status = serverStatus,
                         modifier = Modifier.weight(1f)
                     )
                 }
