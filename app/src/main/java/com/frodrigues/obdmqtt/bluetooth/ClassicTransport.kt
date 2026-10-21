@@ -1,8 +1,13 @@
 package com.frodrigues.obdmqtt.bluetooth
 
+import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,6 +20,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.UUID
 
+@SuppressLint("MissingPermission")
 class ClassicTransport(private val device: BluetoothDevice) : BluetoothTransport {
 
     private val _isConnected = MutableStateFlow(false)
@@ -24,21 +30,47 @@ class ClassicTransport(private val device: BluetoothDevice) : BluetoothTransport
     private var inputStream: InputStream? = null
     private var outputStream: OutputStream? = null
 
-    override suspend fun connect() = withTimeout(15_000) {
-        withContext(Dispatchers.IO) {
-            val s = device.createRfcommSocketToServiceRecord(SPP_UUID)
-            try {
-                runInterruptible { s.connect() }
-            } catch (e: Exception) {
-                runCatching { s.close() }
-                throw e
-            }
-            socket = s
-            inputStream = s.inputStream
-            outputStream = s.outputStream
-            _isConnected.value = true
+    /**
+     * Tries several RFCOMM socket kinds: some car head units can't pair the adapter
+     * (no PIN dialog), and many ELM327 adapters accept an insecure link without pairing.
+     * Unpaired adapters try the insecure socket first, so no pairing request is triggered.
+     */
+    override suspend fun connect() = withContext(Dispatchers.IO) {
+        @Suppress("DEPRECATION")
+        runCatching { BluetoothAdapter.getDefaultAdapter()?.cancelDiscovery() }  // discovery slows RFCOMM down
+
+        val secure = SocketFactory("secure") { it.createRfcommSocketToServiceRecord(SPP_UUID) }
+        val insecure = SocketFactory("insecure") { it.createInsecureRfcommSocketToServiceRecord(SPP_UUID) }
+        // Hidden API used by most OBD apps: raw RFCOMM channel 1, no SDP lookup
+        val channel1 = SocketFactory("channel 1") {
+            it.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType).invoke(it, 1) as BluetoothSocket
         }
+        val order = if (device.bondState == BluetoothDevice.BOND_BONDED) listOf(secure, insecure, channel1)
+                    else listOf(insecure, channel1, secure)
+
+        var lastError: Exception? = null
+        for (factory in order) {
+            val s = try { factory.create(device) } catch (e: Exception) { lastError = e; continue }
+            // connect() ignores thread interrupts: closing the socket is the only way to abort it
+            val watchdog = launch { delay(CONNECT_TIMEOUT_MS); runCatching { s.close() } }
+            try {
+                try { s.connect() } finally { watchdog.cancel() }
+                Log.d(TAG, "Connected with ${factory.name} socket")
+                socket = s
+                inputStream = s.inputStream
+                outputStream = s.outputStream
+                _isConnected.value = true
+                return@withContext
+            } catch (e: IOException) {
+                runCatching { s.close() }
+                Log.w(TAG, "${factory.name} socket failed: ${e.message}")
+                lastError = e
+            }
+        }
+        throw IOException("Connexion Bluetooth impossible : ${lastError?.message}", lastError)
     }
+
+    private class SocketFactory(val name: String, val create: (BluetoothDevice) -> BluetoothSocket)
 
     override suspend fun disconnect() = withContext(Dispatchers.IO) {
         _isConnected.value = false
@@ -80,6 +112,8 @@ class ClassicTransport(private val device: BluetoothDevice) : BluetoothTransport
     }
 
     companion object {
+        private const val TAG = "ClassicTransport"
+        private const val CONNECT_TIMEOUT_MS = 12_000L
         private val SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
     }
 }

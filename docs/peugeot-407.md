@@ -119,6 +119,7 @@ Le niveau de carburant, le kilométrage, la température d'huile ou la consommat
 | Reste sur « Moteur arrêté » alors que le moteur tourne | Batterie ou alternateur faibles (moins de 13,3 V moteur tournant) : désactivez **Lire seulement moteur tournant** et faites contrôler la charge |
 | « Refusé par le calculateur » à l'effacement | Coupez le moteur en laissant le contact, puis recommencez |
 | Le bouton HA n'efface rien | Jeton absent ou invalide dans l'application, ou bouton pressé voiture coupée depuis plus de 2 minutes |
+| « Code incorrect » à l'appairage, sans pouvoir taper le code | La tablette répond toute seule avec un mauvais code. Appairez depuis l'application (**Rechercher les adaptateurs**, puis toucher le Vgate) : elle répond 1234, puis 0000. Si l'appairage échoue quand même, choisissez **Utiliser … sans appairage** |
 | La recherche dans l'application ne trouve pas le Vgate | Adaptateur branché, contact mis, localisation activée (Android 8 à 11). Si rien n'apparaît, même pas un téléphone, la puce Bluetooth de la tablette est réservée au téléphone : utilisez le téléphone pour la collecte |
 | « Service OBD BLE inconnu » | Version BLE non reconnue : signalez le modèle exact de l'adaptateur |
 | Home Assistant « Hors ligne », mais OBD2 « En ligne » | Pas de réseau, ou URL incorrecte. Les mesures reprennent dès le retour du réseau, sans couper le Bluetooth |
