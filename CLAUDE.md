@@ -8,7 +8,7 @@ Android app (Kotlin + Jetpack Compose) that reads OBD2 data from a vehicle via a
 
 - **Package**: `com.frodrigues.obdmqtt`
 - **minSdk**: 26 (Android 8+). Car head units often display a fake "Android 13" over Android 10/11 (e.g. Unisoc UIS7862, kernel 4.14), so API 31/33 calls are version-gated (BLE write/notify, runtime permissions, clipboard)
-- **Protocol confirmed working on**: Jaecoo 7 / OMODA platform (ISO 15765-4 CAN, 11-bit, 500 kbaud)
+- **Protocol confirmed working on**: Jaecoo 7 / OMODA platform (ISO 15765-4 CAN, 11-bit, 500 kbaud); Peugeot 407 + Vgate iCar Pro (ELM327 v2.3) — ISO 14230-4 KWP2000 fast init (`ATSP5`), the adapter's auto search (`ATSP0`) fails on it
 
 ## Build Commands
 
@@ -52,11 +52,11 @@ ELM327 ──BT──► BluetoothTransport (Classic/BLE)
 
 **`PidPoller`** — Polls `fastPids` every 1s cycle plus a slice of `slowPids`, so each slow PID is read once per `SLOW_INTERVAL_SECONDS` (10s) without bursts. Emits `PidReading` via a `Flow`. Commands come from `PidRegistry.command(pid)`; pseudo-PID `PidRegistry.ADAPTER_VOLTAGE` (0x100) reads the battery voltage with `ATRV`.
 
-**`ObdProtocol`** — ELM327 protocol numbers. Default `AUTO` (`ATSP0`) because the target car (Peugeot 407) exists in CAN and KWP2000 variants. Headers are off (`ATH0`) so KWP headers/checksums never mix with data bytes. Mode 22 scanning is skipped while `Mode22Registry.definitions` is empty.
+**`ObdProtocol`** — ELM327 protocol numbers. Default `AUTO` because the target car (Peugeot 407) exists in CAN and KWP2000 variants: `connectEcu()` tries the last working protocol, then `ATSP0`, then each protocol of `AUTO_FALLBACK` explicitly (`ATPC` between attempts) — the ELM327 search returned UNABLE TO CONNECT on a real 407 — and the service saves the one that answered (`LAST_OBD_PROTOCOL`). Headers are off (`ATH0`) so KWP headers/checksums never mix with data bytes. Mode 22 scanning is skipped while `Mode22Registry.definitions` is empty.
 
 **Diagnostics** (`obd/Diagnostics.kt`, `obd/DtcDescriptions.kt`) — `DtcReader` reads PID 01 01 (MIL + readiness), Mode 03 (stored) and Mode 07 (pending) every 60 s in a coroutine alongside `PidPoller`; `ObdCommandExecutor.sendCommand` holds a `Mutex` so both share the adapter. `DtcParser` handles CAN (count byte, multi-frame `0:`/`1:` lines) and KWP (3 codes per line). Mode 04 clear requests come from the app, the MQTT `button`, or (webhook mode) an HA `input_button` read through the REST API with an optional long-lived token (`HaApiClient` + `ClearButtonWatcher`: only presses < 2 min old count). Requests go through `OBDCollectorService.requestClearFaults()` / `requestDiagnosticsRead()`.
 
-**Engine-off gate** — With `engineRunningOnly` (default), the service resets the adapter and reads `ATRV` before touching any ECU; below `ENGINE_RUNNING_VOLTAGE` (13.3 V) it throws `EngineOffException`, shows `WAITING_ENGINE` and rechecks every 5 min. A clear/read request wakes it and bypasses the gate once.
+**Engine-off gate** — With `engineRunningOnly` (default), the service resets the adapter and reads `ATRV` before touching any ECU; below `ENGINE_RUNNING_VOLTAGE` (13.3 V) it throws `EngineOffException`, shows `WAITING_ENGINE` and rechecks every 20 s during the first 10 min after collection starts (the unit boots with the ignition, before the engine), then every 2 min, or at once when the screen turns on / Bluetooth turns on (`deviceWakeReceiver` → `recheckNow`: car head units sleep with the ignition instead of rebooting). A clear/read request (`wakeups`) wakes it and bypasses the gate once. `BootReceiver` also starts the service on QUICKBOOT_POWERON and MY_PACKAGE_REPLACED when auto-start is on.
 
 **`HaEntities`** (`webhook/`) — Single source of HA names/entity IDs (sensors, diagnostics, `input_button`) used by the YAML package, the dashboard and the button poller.
 

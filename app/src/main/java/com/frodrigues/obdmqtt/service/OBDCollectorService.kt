@@ -3,7 +3,11 @@ package com.frodrigues.obdmqtt.service
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Binder
@@ -11,6 +15,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.frodrigues.obdmqtt.MainActivity
@@ -35,6 +40,7 @@ import com.frodrigues.obdmqtt.util.DebugLog
 import com.frodrigues.obdmqtt.webhook.buildWebhookUrl
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 
@@ -61,6 +67,8 @@ class OBDCollectorService : LifecycleService() {
     private lateinit var settings: AppSettings
     private var wakeLock: PowerManager.WakeLock? = null
     private var collectorJob: Job? = null
+    /** When collection (re)started: right after the car unit boots the engine is often not started yet. */
+    private var collectionStartedAt = 0L
     /** Set once the ECU answered during the current attempt. */
     @Volatile private var ecuConnected = false
     private var lastClear: ClearResult? = null
@@ -78,6 +86,16 @@ class OBDCollectorService : LifecycleService() {
         obdProtocolLabel.value = ""
         settings = AppSettings(applicationContext.dataStore)
         createNotificationChannel()
+        ContextCompat.registerReceiver(
+            this,
+            deviceWakeReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_USER_PRESENT)
+                addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+            },
+            ContextCompat.RECEIVER_EXPORTED  // system / Bluetooth broadcasts
+        )
     }
 
     override fun onBind(intent: Intent): IBinder {
@@ -106,6 +124,7 @@ class OBDCollectorService : LifecycleService() {
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "OBDCollector::polling")
             .also { it.acquire() }
         val oldJob = collectorJob
+        collectionStartedAt = System.currentTimeMillis()
         collectorJob = lifecycleScope.launch(Dispatchers.Default) {
             oldJob?.cancelAndJoin()
             collectWithRetry()
@@ -141,8 +160,11 @@ class OBDCollectorService : LifecycleService() {
             bypassEngineGate = if (engineOff && config.engineRunningOnly) {
                 status.value = ServiceStatus.WAITING_ENGINE
                 val volts = engineOffVoltage.value?.let { "%.1f V".format(java.util.Locale.FRANCE, it) } ?: "?"
-                updateNotification("Moteur arrêté ($volts) — en veille, vérification toutes les ${ENGINE_OFF_RECHECK_MS / 60_000} min")
-                waitForWakeup(config, ENGINE_OFF_RECHECK_MS)
+                // Just after boot the unit is on before the engine: check often for a while
+                val recheckMs = if (System.currentTimeMillis() - collectionStartedAt < STARTUP_WINDOW_MS)
+                    STARTUP_RECHECK_MS else ENGINE_OFF_RECHECK_MS
+                updateNotification("Moteur arrêté ($volts) — nouvelle vérification dans ${recheckMs / 1000} s")
+                waitForWakeup(config, recheckMs)
             } else {
                 status.value = ServiceStatus.RECONNECTING
                 val delay = backoffMs.getOrElse(attempt) { 60_000L }
@@ -162,9 +184,34 @@ class OBDCollectorService : LifecycleService() {
         while (true) {
             val remaining = deadline - System.currentTimeMillis()
             if (remaining <= 0) return false
-            val woken = withTimeoutOrNull(minOf(remaining, HA_BUTTON_POLL_MS)) { wakeups.receive() } != null
-            if (woken) return true
+            // wakeups = app/HA request (bypasses the engine gate); recheckNow = the car unit woke up
+            val bypassGate = withTimeoutOrNull(minOf(remaining, HA_BUTTON_POLL_MS)) {
+                select {
+                    wakeups.onReceive { true }
+                    recheckNow.onReceive { false }
+                }
+            }
+            if (bypassGate != null) {
+                if (!bypassGate) DebugLog.add("Réveil de l'appareil : nouvelle tentative immédiate")
+                return bypassGate
+            }
             pollHaClearButton(config)
+        }
+    }
+
+    /**
+     * Car head units sleep with the ignition instead of rebooting: when the screen comes
+     * back on or Bluetooth is switched on again, retry at once instead of waiting.
+     */
+    private val deviceWakeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val woke = when (intent.action) {
+                Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT -> true
+                BluetoothAdapter.ACTION_STATE_CHANGED ->
+                    intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1) == BluetoothAdapter.STATE_ON
+                else -> false
+            }
+            if (woke) recheckNow.trySend(Unit)
         }
     }
 
@@ -216,7 +263,7 @@ class OBDCollectorService : LifecycleService() {
 
         val sink = TelemetrySink.create(config, onStatus = { serverStatus.value = it }, onClearRequest = ::requestClearFaults)
         try {
-            val executor = ObdCommandExecutor(transport, config.obdProtocol)
+            val executor = ObdCommandExecutor(transport, config.obdProtocol, settings.lastObdProtocol.first())
             executor.resetAdapter()
 
             // Only the adapter is queried here (AT RV): a parked car's ECUs are never woken up
@@ -230,6 +277,7 @@ class OBDCollectorService : LifecycleService() {
             executor.connectEcu()
             ecuConnected = true
             DebugLog.add("Calculateur connecté — protocole : ${executor.detectedProtocol?.label ?: "inconnu"}")
+            executor.detectedProtocol?.let { settings.saveLastObdProtocol(it) }
             engineOffVoltage.value = null
             while (wakeups.tryReceive().isSuccess) Unit  // requests are handled by the diagnostics loop below
             obdProtocolLabel.value = executor.detectedProtocol?.label ?: ""
@@ -367,6 +415,7 @@ class OBDCollectorService : LifecycleService() {
     }
 
     override fun onDestroy() {
+        runCatching { unregisterReceiver(deviceWakeReceiver) }
         releaseWakeLock()
         super.onDestroy()
     }
@@ -429,13 +478,16 @@ class OBDCollectorService : LifecycleService() {
         private const val TAG = "OBDCollectorService"
         /** Alternator charging ⇒ engine running. A rested battery sits at 12.2–12.8 V. */
         const val ENGINE_RUNNING_VOLTAGE = 13.3
-        const val ENGINE_OFF_RECHECK_MS = 5 * 60_000L
+        const val ENGINE_OFF_RECHECK_MS = 2 * 60_000L
+        const val STARTUP_RECHECK_MS = 20_000L
+        const val STARTUP_WINDOW_MS = 10 * 60_000L
         const val DIAG_INTERVAL_MS = 60_000L
         const val CLEAR_REQUEST_MAX_AGE_MS = 2 * 60_000L
         private const val HA_BUTTON_POLL_MS = 15_000L
 
         private val diagRequests = Channel<DiagRequest>(capacity = 8)
         private val wakeups = Channel<Unit>(Channel.CONFLATED)
+        private val recheckNow = Channel<Unit>(Channel.CONFLATED)
 
         /** Reads the fault codes now — wakes the service even if the engine is off (ignition must be on). */
         fun requestDiagnosticsRead() {

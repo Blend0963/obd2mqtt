@@ -11,7 +11,9 @@ import java.io.IOException
 
 class ObdCommandExecutor(
     private val transport: BluetoothTransport,
-    private val protocol: ObdProtocol = ObdProtocol.AUTO
+    private val protocol: ObdProtocol = ObdProtocol.AUTO,
+    /** Protocol that worked last time (AUTO mode): tried first to connect faster. */
+    private val lastWorking: ObdProtocol? = null
 ) {
 
     /** Live polling and diagnostics run in separate coroutines: one command/reply at a time. */
@@ -48,19 +50,40 @@ class ObdCommandExecutor(
     suspend fun readBatteryVoltage(): Double? =
         PidParser.parse(PidRegistry.ADAPTER_VOLTAGE, raw("ATRV"))
 
-    /** Selects the protocol and wakes the engine ECU. Throws if it does not answer. */
+    /**
+     * Selects the protocol and wakes the engine ECU. Throws if it does not answer.
+     *
+     * In AUTO mode the adapter's own search (AT SP 0) is tried after [lastWorking], then
+     * each protocol explicitly: the ELM327 search often fails on older K-line ECUs (PSA
+     * KWP2000) that answer fine once the protocol is forced.
+     */
     suspend fun connectEcu() {
-        raw("ATSP${protocol.code}")
-        raw("ATAT1")
-
-        // First request wakes the ECU: protocol search (auto) or KWP 5-baud init can take >10 s
-        val probe = raw("0100", PROBE_TIMEOUT_MS)
-        Log.d(TAG, "0100: $probe")
-        if (ObdResponseParser.extractDataBytes(probe, 0x00) == null) {
-            throw IOException("Le calculateur ne répond pas (contact mis ?). Réponse : ${probe.take(40)}")
+        val attempts = if (protocol != ObdProtocol.AUTO) listOf(protocol)
+                       else (listOfNotNull(lastWorking) + ObdProtocol.AUTO + AUTO_FALLBACK).distinct()
+        attempts.forEachIndexed { index, p ->
+            if (index > 0) {
+                DebugLog.add("Essai du protocole : ${p.label}")
+                runCatching { raw("ATPC") }  // close the failed session before the next init
+            }
+            if (probe(p)) {
+                detectedProtocol = if (p == ObdProtocol.AUTO) ObdProtocol.fromDpn(raw("ATDPN")) else p
+                Log.d(TAG, "Protocol: ${detectedProtocol?.label}")
+                return
+            }
         }
-        detectedProtocol = ObdProtocol.fromDpn(raw("ATDPN"))
-        Log.d(TAG, "Protocol: ${detectedProtocol?.label}")
+        throw IOException(
+            if (protocol == ObdProtocol.AUTO) "Le calculateur ne répond sur aucun protocole (contact mis ?)"
+            else "Le calculateur ne répond pas en ${protocol.label} (contact mis ?)"
+        )
+    }
+
+    /** True when the ECU answers 01 00 with [p]; a timeout counts as no answer. */
+    private suspend fun probe(p: ObdProtocol): Boolean {
+        raw("ATSP${p.code}")
+        raw("ATAT1")
+        // First request wakes the ECU: protocol search (auto) or KWP 5-baud init can take >10 s
+        val reply = try { raw("0100", PROBE_TIMEOUT_MS) } catch (e: IOException) { return false }
+        return ObdResponseParser.extractDataBytes(reply, 0x00) != null
     }
 
     suspend fun sendCommand(command: String, timeoutMs: Long = DEFAULT_TIMEOUT_MS): String =
@@ -83,5 +106,15 @@ class ObdCommandExecutor(
     companion object {
         private const val TAG = "ObdCommandExecutor"
         private const val PROBE_TIMEOUT_MS = 30_000L
+
+        /** Explicit protocols tried when the adapter's automatic search fails (older cars first). */
+        val AUTO_FALLBACK = listOf(
+            ObdProtocol.ISO_14230_KWP_FAST,
+            ObdProtocol.ISO_14230_KWP_5BAUD,
+            ObdProtocol.ISO_9141_2,
+            ObdProtocol.ISO_15765_CAN_11_500,
+            ObdProtocol.ISO_15765_CAN_29_500,
+            ObdProtocol.ISO_15765_CAN_11_250
+        )
     }
 }
