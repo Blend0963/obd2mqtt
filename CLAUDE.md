@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Android app (Kotlin + Jetpack Compose) that reads OBD2 data from a vehicle via an ELM327 Bluetooth adapter and publishes sensor readings to Home Assistant via MQTT Discovery. Webhook mode (default) also generates the HA YAML and a Lovelace dashboard from Settings. Target vehicle: Peugeot 407 with a Vgate iCar Pro adapter.
 
 - **Package**: `com.frodrigues.obdmqtt`
-- **minSdk**: 33 (Android 13+)
+- **minSdk**: 26 (Android 8+). Car head units often display a fake "Android 13" over Android 10/11 (e.g. Unisoc UIS7862, kernel 4.14), so API 31/33 calls are version-gated (BLE write/notify, runtime permissions, clipboard)
 - **Protocol confirmed working on**: Jaecoo 7 / OMODA platform (ISO 15765-4 CAN, 11-bit, 500 kbaud)
 
 ## Build Commands

@@ -3,11 +3,12 @@ package com.frodrigues.obdmqtt.ui
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.ClipData
-import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.PersistableBundle
+import android.widget.Toast
 import android.provider.Settings as AndroidSettings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -29,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.frodrigues.obdmqtt.BatteryOptimization
 import com.frodrigues.obdmqtt.mqtt.testMqttConnection
 import com.frodrigues.obdmqtt.obd.ObdProtocol
 import com.frodrigues.obdmqtt.settings.AppConfig
@@ -107,9 +109,14 @@ fun SettingsScreen(
         } catch (_: SecurityException) { emptyList() }
     }
 
+    var batteryExempt by remember { mutableStateOf(BatteryOptimization.isExempt(context)) }
+
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) refreshDevices()
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                refreshDevices()
+                batteryExempt = BatteryOptimization.isExempt(context)
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -717,6 +724,28 @@ fun SettingsScreen(
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 ListItem(
+                    headlineContent = { Text("Restriction batterie d'Android") },
+                    supportingContent = {
+                        Text(
+                            text = if (batteryExempt)
+                                "Désactivée ✓ — la collecte peut tourner en arrière-plan."
+                            else
+                                "Active : Android peut arrêter la collecte en arrière-plan. Appuyez pour la désactiver.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (batteryExempt) MaterialTheme.colorScheme.onSurfaceVariant
+                                    else MaterialTheme.colorScheme.error
+                        )
+                    },
+                    colors = ListItemDefaults.colors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    ),
+                    modifier = Modifier.clickable(
+                        enabled = !batteryExempt,
+                        onClickLabel = "Désactiver la restriction batterie"
+                    ) { BatteryOptimization.requestExemption(context) }
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ListItem(
                     headlineContent = { Text("Lire seulement moteur tournant") },
                     supportingContent = {
                         Text(
@@ -838,14 +867,19 @@ fun SettingsScreen(
     }
 }
 
-/** Copies [text] flagged as sensitive, so Android hides it from the clipboard preview (API 33+ shows its own confirmation). */
+/** Copies [text] flagged as sensitive, so Android 13+ hides it from the clipboard preview. */
 private fun copyToClipboard(context: Context, label: String, text: String) {
     val clip = ClipData.newPlainText(label, text).apply {
         description.extras = PersistableBundle().apply {
-            putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+            // ClipDescription.EXTRA_IS_SENSITIVE (API 33); ignored by older versions
+            putBoolean("android.content.extra.IS_SENSITIVE", true)
         }
     }
     context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
+    // Android 13+ shows its own confirmation
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        Toast.makeText(context, "$label copié", Toast.LENGTH_SHORT).show()
+    }
 }
 
 @Composable

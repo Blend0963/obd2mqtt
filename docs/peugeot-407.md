@@ -4,7 +4,7 @@ Guide d'installation pour envoyer en direct les données OBD2 de la Peugeot 407 
 
 ## Ce qu'il faut
 
-- Un téléphone Android 13 ou plus récent, qui reste dans la voiture (connexion 4G)
+- Un téléphone ou une tablette de voiture sous Android 8 ou plus récent, qui reste dans la voiture (connexion 4G). Les tablettes et autoradios qui affichent « Android 13 » mais tournent en réalité sous Android 10 ou 11 sont pris en charge
 - Un adaptateur **Vgate iCar Pro**, en version Bluetooth 3.0 ou BLE 4.0 (les deux sont gérées)
 - Home Assistant joignable depuis Internet **en HTTPS** avec un certificat valide : Nabu Casa (`https://xxxx.ui.nabu.casa`), ou un nom de domaine avec Let's Encrypt / reverse proxy
 
@@ -28,6 +28,7 @@ Dans l'application, ouvrez **Réglages** :
 6. Appuyez sur **Tester la connexion** : le message « ✓ Serveur joignable » doit s'afficher.
 7. **Scanner OBD2 → Protocole** : laissez **Automatique**. Selon la motorisation, la 407 utilise le CAN (ISO 15765-4) ou le KWP2000 (ISO 14230-4) ; l'application trouve le bon.
 8. Activez **Démarrage automatique** si le téléphone reste dans la voiture.
+   Au premier lancement, l'application demande aussi à ne plus être limitée par la batterie : acceptez, sinon Android peut couper la collecte en arrière-plan. Vous pouvez y revenir dans **Réglages → Fonctionnement → Restriction batterie d'Android**. Sur certaines tablettes de voiture, autorisez aussi le démarrage automatique de l'application dans les paramètres du constructeur.
 9. Laissez **Lire seulement moteur tournant** activé (voir « Batterie » plus bas).
 10. *Facultatif* — **Jeton d'accès Home Assistant** : uniquement pour pouvoir effacer les défauts depuis Home Assistant (voir « Diagnostic »).
 

@@ -20,7 +20,7 @@ Android app that reads OBD2 data from a vehicle via an ELM327 Bluetooth adapter 
 
 ## Requirements
 
-- Android 13+ (minSdk 33)
+- Android 8+ (minSdk 26) — includes car head units/tablets that show "Android 13" but run Android 10/11
 - ELM327 OBD2 Bluetooth adapter (Classic or BLE)
 - Vehicle with EOBD/OBD2 (petrol 2001+, diesel 2004+ in the EU) — confirmed on Jaecoo 7 / OMODA (CAN); target: Peugeot 407 (CAN or KWP2000 depending on engine)
 - MQTT broker (e.g. Mosquitto running alongside Home Assistant) **or** Home Assistant reachable over HTTPS (webhook mode)

@@ -40,7 +40,7 @@ android {
 
     defaultConfig {
         applicationId = "com.frodrigues.obdmqtt"
-        minSdk = 33
+        minSdk = 26
         targetSdk = 36
         versionCode = appVersionCode
         versionName = appVersionName

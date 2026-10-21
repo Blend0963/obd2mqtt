@@ -1,6 +1,7 @@
 package com.frodrigues.obdmqtt
 
 import android.Manifest
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -22,19 +23,27 @@ class MainActivity : ComponentActivity() {
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { /* handle result: service will handle missing permissions gracefully */ }
+    ) {
+        // Service handles missing permissions gracefully; ask for the battery exemption next
+        BatteryOptimization.requestOnFirstLaunch(this)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        permissionLauncher.launch(
-            arrayOf(
-                Manifest.permission.BLUETOOTH_CONNECT,
-                Manifest.permission.BLUETOOTH_SCAN,
-                Manifest.permission.POST_NOTIFICATIONS
-            )
-        )
+        // Before Android 12 Bluetooth access is an install-time permission; notifications need asking from 13
+        val runtimePermissions = buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                add(Manifest.permission.BLUETOOTH_CONNECT)
+                add(Manifest.permission.BLUETOOTH_SCAN)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        if (runtimePermissions.isNotEmpty()) permissionLauncher.launch(runtimePermissions.toTypedArray())
+        else BatteryOptimization.requestOnFirstLaunch(this)
 
         setContent {
             OdbMqttTheme {
