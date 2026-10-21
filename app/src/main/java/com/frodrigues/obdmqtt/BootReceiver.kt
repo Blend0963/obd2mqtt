@@ -22,7 +22,8 @@ class BootReceiver : BroadcastReceiver() {
                     .getBoolean(AppSettings.DE_KEY_AUTO_START, false)
                 if (autoStart) startService(context)
             }
-            Intent.ACTION_BOOT_COMPLETED -> {
+            // Full boot, "quick boot" of some car units / OEMs, or the app was just updated
+            Intent.ACTION_BOOT_COMPLETED, ACTION_QUICKBOOT, ACTION_QUICKBOOT_HTC, Intent.ACTION_MY_PACKAGE_REPLACED -> {
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
@@ -36,11 +37,19 @@ class BootReceiver : BroadcastReceiver() {
         }
     }
 
+    companion object {
+        private const val ACTION_QUICKBOOT = "android.intent.action.QUICKBOOT_POWERON"
+        private const val ACTION_QUICKBOOT_HTC = "com.htc.intent.action.QUICKBOOT_POWERON"
+    }
+
     private fun startService(context: Context) {
-        context.startForegroundService(
-            Intent(context, OBDCollectorService::class.java).apply {
-                action = OBDCollectorService.ACTION_START
-            }
-        )
+        // Android 12+ may refuse a background start for non-exempt broadcasts (quick boot)
+        runCatching {
+            context.startForegroundService(
+                Intent(context, OBDCollectorService::class.java).apply {
+                    action = OBDCollectorService.ACTION_START
+                }
+            )
+        }
     }
 }

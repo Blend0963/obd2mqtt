@@ -27,7 +27,7 @@ Dans l'application, ouvrez **Réglages** :
 5. **Intervalle d'envoi** : 1 seconde pour du temps réel.
 6. Appuyez sur **Tester la connexion** : le message « ✓ Serveur joignable » doit s'afficher.
 7. **Scanner OBD2 → Protocole** : laissez **Automatique**, ou choisissez directement **ISO 14230-4 KWP2000 (init rapide)**, le protocole confirmé sur une 407 avec le Vgate iCar Pro. La recherche automatique de l'adaptateur échoue sur cette voiture ; l'application essaie alors elle-même chaque protocole et retient celui qui répond. Selon la motorisation, la 407 utilise le CAN (ISO 15765-4) ou le KWP2000 (ISO 14230-4) ; l'application trouve le bon.
-8. Activez **Démarrage automatique** si le téléphone reste dans la voiture.
+8. Activez **Démarrage automatique** si le téléphone ou la tablette reste dans la voiture : la collecte démarre avec l'appareil (démarrage complet ou « démarrage rapide » des autoradios) et après chaque mise à jour de l'application. La plupart des autoradios ne redémarrent pas mais se mettent en veille avec le contact : l'application reste alors lancée et se reconnecte d'elle-même dès que l'écran se rallume, sans rien toucher.
    Au premier lancement, l'application demande aussi à ne plus être limitée par la batterie : acceptez, sinon Android peut couper la collecte en arrière-plan. Vous pouvez y revenir dans **Réglages → Fonctionnement → Restriction batterie d'Android**. Sur certaines tablettes de voiture, autorisez aussi le démarrage automatique de l'application dans les paramètres du constructeur.
 9. Laissez **Lire seulement moteur tournant** activé (voir « Batterie » plus bas).
 10. *Facultatif* — **Jeton d'accès Home Assistant** : uniquement pour pouvoir effacer les défauts depuis Home Assistant (voir « Diagnostic »).
@@ -92,7 +92,7 @@ Seuls les défauts du **calculateur moteur** sont accessibles en OBD2. ABS/ESP, 
 
 La prise OBD est alimentée en permanence. Avec **Lire seulement moteur tournant** (activé par défaut), l'application lit d'abord la tension batterie mesurée par l'adaptateur, ce qui ne réveille aucun calculateur :
 - **au-dessus de 13,3 V**, l'alternateur charge, donc le moteur tourne : l'application interroge la voiture ;
-- **en dessous**, elle ne l'interroge pas, affiche « Moteur arrêté » et revérifie toutes les 5 minutes.
+- **en dessous**, elle ne l'interroge pas, affiche « Moteur arrêté » et revérifie toutes les 2 minutes, et aussitôt que l'écran se rallume ou que le Bluetooth revient (réveil de l'autoradio au démarrage).
 
 Les calculateurs (dont le BSI) peuvent ainsi se mettre en veille normalement voiture garée. Pour une immobilisation de plusieurs semaines, débranchez quand même l'adaptateur.
 
