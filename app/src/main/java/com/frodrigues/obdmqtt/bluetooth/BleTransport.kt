@@ -2,6 +2,7 @@ package com.frodrigues.obdmqtt.bluetooth
 
 import android.bluetooth.*
 import android.content.Context
+import android.os.Build
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -71,11 +72,16 @@ class BleTransport(
             }
             val useIndication = notifyChar.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY == 0 &&
                 notifyChar.properties and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0
-            gatt.writeDescriptor(
-                descriptor,
-                if (useIndication) BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
-                else BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-            )
+            val enable = if (useIndication) BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+                         else BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                gatt.writeDescriptor(descriptor, enable)
+            } else {
+                @Suppress("DEPRECATION")
+                descriptor.value = enable
+                @Suppress("DEPRECATION")
+                gatt.writeDescriptor(descriptor)
+            }
         }
 
         override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
@@ -87,11 +93,21 @@ class BleTransport(
             }
         }
 
+        // Android 13+
         override fun onCharacteristicChanged(
             gatt: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray
-        ) {
+        ) = onData(value)
+
+        // Android 8–12 only call this one
+        @Deprecated("Deprecated in API 33")
+        @Suppress("DEPRECATION")
+        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+            characteristic.value?.let { onData(it) }
+        }
+
+        private fun onData(value: ByteArray) {
             val chunk = value.toString(Charsets.UTF_8)
             responseBuffer.append(chunk)
             if (responseBuffer.contains('>')) {
@@ -131,8 +147,18 @@ class BleTransport(
                 w.properties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0)
                 BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
             else BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-        val result = g.writeCharacteristic(w, "$command\r".toByteArray(Charsets.UTF_8), writeType)
-        if (result != BluetoothStatusCodes.SUCCESS) throw IOException("BLE write failed: $result")
+        val bytes = "$command\r".toByteArray(Charsets.UTF_8)
+        val ok = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            g.writeCharacteristic(w, bytes, writeType) == BluetoothStatusCodes.SUCCESS
+        } else {
+            @Suppress("DEPRECATION")
+            w.writeType = writeType
+            @Suppress("DEPRECATION")
+            w.value = bytes
+            @Suppress("DEPRECATION")
+            g.writeCharacteristic(w)
+        }
+        if (!ok) throw IOException("BLE write failed")
         return withTimeout(timeoutMs) { responseChannel.receive() }
     }
 

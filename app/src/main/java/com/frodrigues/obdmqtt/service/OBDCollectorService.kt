@@ -10,6 +10,7 @@ import android.os.Binder
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.frodrigues.obdmqtt.MainActivity
@@ -92,7 +93,9 @@ class OBDCollectorService : LifecycleService() {
     }
 
     private fun startCollection() {
-        startForeground(
+        // ServiceCompat drops the service type on Android < 10, where it doesn't exist
+        ServiceCompat.startForeground(
+            this,
             NOTIFICATION_ID,
             buildNotification("Démarrage…"),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE

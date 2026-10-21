@@ -3,11 +3,12 @@ package com.frodrigues.obdmqtt.ui
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.ClipData
-import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.PersistableBundle
+import android.widget.Toast
 import android.provider.Settings as AndroidSettings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -838,14 +839,19 @@ fun SettingsScreen(
     }
 }
 
-/** Copies [text] flagged as sensitive, so Android hides it from the clipboard preview (API 33+ shows its own confirmation). */
+/** Copies [text] flagged as sensitive, so Android 13+ hides it from the clipboard preview. */
 private fun copyToClipboard(context: Context, label: String, text: String) {
     val clip = ClipData.newPlainText(label, text).apply {
         description.extras = PersistableBundle().apply {
-            putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+            // ClipDescription.EXTRA_IS_SENSITIVE (API 33); ignored by older versions
+            putBoolean("android.content.extra.IS_SENSITIVE", true)
         }
     }
     context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
+    // Android 13+ shows its own confirmation
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        Toast.makeText(context, "$label copié", Toast.LENGTH_SHORT).show()
+    }
 }
 
 @Composable

@@ -4,7 +4,7 @@ Guide d'installation pour envoyer en direct les données OBD2 de la Peugeot 407 
 
 ## Ce qu'il faut
 
-- Un téléphone Android 13 ou plus récent, qui reste dans la voiture (connexion 4G)
+- Un téléphone ou une tablette de voiture sous Android 8 ou plus récent, qui reste dans la voiture (connexion 4G). Les tablettes et autoradios qui affichent « Android 13 » mais tournent en réalité sous Android 10 ou 11 sont pris en charge
 - Un adaptateur **Vgate iCar Pro**, en version Bluetooth 3.0 ou BLE 4.0 (les deux sont gérées)
 - Home Assistant joignable depuis Internet **en HTTPS** avec un certificat valide : Nabu Casa (`https://xxxx.ui.nabu.casa`), ou un nom de domaine avec Let's Encrypt / reverse proxy
 
