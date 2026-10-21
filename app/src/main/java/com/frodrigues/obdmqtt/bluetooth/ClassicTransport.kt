@@ -48,12 +48,14 @@ class ClassicTransport(private val device: BluetoothDevice) : BluetoothTransport
         outputStream = null
     }
 
-    override suspend fun sendCommand(command: String): String {
+    override suspend fun sendCommand(command: String, timeoutMs: Long): String {
         try {
-            return withTimeout(5_000) {
+            return withTimeout(timeoutMs) {
                 withContext(Dispatchers.IO) {
                     val out = outputStream ?: throw IOException("Not connected")
                     val inp = inputStream ?: throw IOException("Not connected")
+                    // Drop a late reply left over from a previous timed-out command
+                    if (inp.available() > 0) inp.skip(inp.available().toLong())
                     out.write("$command\r".toByteArray(Charsets.UTF_8))
                     out.flush()
                     readUntilPrompt(inp)

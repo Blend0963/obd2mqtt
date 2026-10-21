@@ -51,6 +51,11 @@ class PidScanner(
         Log.d(TAG, "Known in registry: ${supported.count { PidRegistry.definitions.containsKey(it) }}")
         Log.d(TAG, "Unknown (raw): ${supported.count { !PidRegistry.definitions.containsKey(it) }}")
 
+        // Battery voltage read by the adapter itself — available on any car
+        if (PidParser.parse(PidRegistry.ADAPTER_VOLTAGE, executor.sendCommand("ATRV")) != null) {
+            supported.add(PidRegistry.ADAPTER_VOLTAGE)
+        }
+
         settings.savePidCache(supported)
         return supported
     }

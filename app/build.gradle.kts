@@ -82,6 +82,10 @@ android {
     buildFeatures {
         compose = true
     }
+    testOptions {
+        // android.util.Log calls in OBD classes return defaults instead of throwing in JVM tests
+        unitTests.isReturnDefaultValues = true
+    }
     packaging {
         resources {
             excludes += setOf(

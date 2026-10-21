@@ -18,8 +18,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val activePidCount: StateFlow<Int> = OBDCollectorService.activePidCount
     val lastUpdateTime: StateFlow<Long> = OBDCollectorService.lastUpdateTime
     val btStatus: StateFlow<ConnectionStatus> = OBDCollectorService.btStatus
-    val mqttStatus: StateFlow<ConnectionStatus> = OBDCollectorService.mqttStatus
+    val serverStatus: StateFlow<ConnectionStatus> = OBDCollectorService.serverStatus
     val pidReadings: StateFlow<Map<Int, Double>> = OBDCollectorService.pidReadings
+    val obdProtocolLabel: StateFlow<String> = OBDCollectorService.obdProtocolLabel
 
     fun startService() {
         val intent = Intent(getApplication(), OBDCollectorService::class.java).apply {

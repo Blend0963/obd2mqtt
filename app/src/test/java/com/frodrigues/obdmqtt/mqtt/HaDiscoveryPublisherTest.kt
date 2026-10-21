@@ -13,7 +13,6 @@ class HaDiscoveryPublisherTest {
         mqttPort = 1883,
         mqttUser = "",
         mqttPassword = "",
-        pollIntervalSeconds = 5,
         deviceName = "Test Car",
         deviceModel = "Model X",
         deviceManufacturer = "Maker"
@@ -51,7 +50,7 @@ class HaDiscoveryPublisherTest {
         assertTrue(payload.contains("obd2/AABBCCDDEEFF/0C/state"))
         assertTrue(payload.contains("\"unique_id\""))
         assertTrue(payload.contains("\"unit_of_measurement\""))
-        assertTrue(payload.contains("Test Car RPM"))
+        assertTrue(payload.contains("Test Car Régime moteur"))
     }
 
     @Test
@@ -71,7 +70,7 @@ class HaDiscoveryPublisherTest {
     }
 
     @Test
-    fun `skips unknown pids`() = runTest {
+    fun `publishes unknown pids with raw name`() = runTest {
         val published = mutableListOf<Pair<String, String>>()
         val publisher = HaDiscoveryPublisher(
             publish = { topic, payload -> published.add(topic to payload) },
@@ -80,6 +79,7 @@ class HaDiscoveryPublisherTest {
 
         publisher.publishDiscovery(setOf(0xFF), "AABBCCDDEEFF")
 
-        assertTrue(published.isEmpty())
+        assertEquals(1, published.size)
+        assertTrue(published[0].second.contains("PID 0xFF"))
     }
 }

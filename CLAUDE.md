@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Android app (Kotlin + Jetpack Compose) that reads OBD2 data from a vehicle via an ELM327 Bluetooth adapter and publishes sensor readings to Home Assistant via MQTT Discovery. Also includes a Python helper (`ha-dashboard/`) for creating HA dashboards.
+Android app (Kotlin + Jetpack Compose) that reads OBD2 data from a vehicle via an ELM327 Bluetooth adapter and publishes sensor readings to Home Assistant via MQTT Discovery. Webhook mode (default) also generates the HA YAML and a Lovelace dashboard from Settings. Target vehicle: Peugeot 407 with a Vgate iCar Pro adapter.
 
 - **Package**: `com.frodrigues.obdmqtt`
 - **minSdk**: 33 (Android 13+)
@@ -27,10 +27,10 @@ Android app (Kotlin + Jetpack Compose) that reads OBD2 data from a vehicle via a
 ELM327 ──BT──► BluetoothTransport (Classic/BLE)
                       │
                       ▼
-              ObdCommandExecutor  (AT init: ATZ, ATE0, ATL0, ATH1, ATSP6, ATAT1)
+              ObdCommandExecutor  (AT init: ATZ, ATE0, ATL0, ATH0, ATSP<n> (0 = auto), ATAT1, then 0100 probe + ATDPN)
                       │
                PidScanner / Mode22Scanner  (brute-force or cache)
-               PidPoller  (fast PIDs: 1s, slow PIDs: 30s)
+               PidPoller  (fast PIDs: 1s, slow PIDs: round-robin over 10s)
                       │
                       ▼
           MqttPublisher ──► Home Assistant (MQTT Discovery)
@@ -50,9 +50,17 @@ ELM327 ──BT──► BluetoothTransport (Classic/BLE)
 
 **`PidScanner`** — Probes Mode 01 PIDs 0x01–0xFF (excluding support PIDs). Results cached in DataStore (`cachedPids`). Cache cleared via Settings "Rescan PIDs". **`Mode22Scanner`** — Same pattern for Mode 22 (2-byte PIDs), cached separately.
 
-**`PidPoller`** — Splits active PIDs into `fastPids` (`isFast=true`, polled every 1s) and `slowPids` (polled every 30s, every 30th cycle). Emits `PidReading` via a `Flow`.
+**`PidPoller`** — Polls `fastPids` every 1s cycle plus a slice of `slowPids`, so each slow PID is read once per `SLOW_INTERVAL_SECONDS` (10s) without bursts. Emits `PidReading` via a `Flow`. Commands come from `PidRegistry.command(pid)`; pseudo-PID `PidRegistry.ADAPTER_VOLTAGE` (0x100) reads the battery voltage with `ATRV`.
 
-**`AppSettings`** — DataStore-backed settings. `snapshot()` returns a one-shot `AppConfig` for use in the service. PID caches are hex-encoded comma-separated strings. `selectedPids = null` means "publish all discovered PIDs".
+**`ObdProtocol`** — ELM327 protocol numbers. Default `AUTO` (`ATSP0`) because the target car (Peugeot 407) exists in CAN and KWP2000 variants. Headers are off (`ATH0`) so KWP headers/checksums never mix with data bytes. Mode 22 scanning is skipped while `Mode22Registry.definitions` is empty.
+
+**Language** — UI strings, notifications, error messages and PID names (which become HA sensor names) are in French, hardcoded in Compose (no string resources).
+
+**`AppSettings`** — DataStore-backed settings. `snapshot()` returns a one-shot `AppConfig` for use in the service. PID caches are hex-encoded comma-separated strings. Fast PIDs default to `DEFAULT_FAST_PIDS`; until the user edits the selection, every other discovered PID is slow ("all data").
+
+**`TelemetrySink`** (`service/`) — Where readings go, chosen by `AppConfig.publishMode`. `MqttSink` wraps `MqttPublisher` + HA Discovery; `WebhookSink` POSTs the latest snapshot every `webhookIntervalSeconds` from a background loop (failures only flip `serverStatus`, never the BT session).
+
+**`webhook/`** — `HaDashboardYaml` (Lovelace dashboard; entity IDs = HA slugify of sensor names), `WebhookPublisher` (HTTPS POST to `<haUrl>/api/webhook/<id>`, URL validated by `buildWebhookUrl`, which rejects non-HTTPS), `WebhookPayload` (JSON bodies, PIDs keyed by hex), `HaWebhookYaml` (generates the HA trigger-based template sensors YAML copied from Settings).
 
 **`HaDiscoveryPublisher`** — Publishes retained MQTT configs to `homeassistant/sensor/obd2_<mac>/<PID>/config`. State values go to `obd2/<mac>/<PID>/state`.
 
@@ -65,11 +73,13 @@ ELM327 ──BT──► BluetoothTransport (Classic/BLE)
 | `homeassistant/sensor/obd2_<mac>/m22_<PID>/config` | Mode 22 Discovery config (retained) |
 | `obd2/<mac>/m22_<PID>/state` | Mode 22 sensor value (retained) |
 
+Webhook payload: `{"available":true,"ts":<ms>,"device":"<name>","pids":{"0C":850,...}}`; `{"available":false,...,"pids":{}}` on disconnect; `{"test":true}` for the connection test (ignored by the HA template condition).
+
 MAC in topics = BT address with colons removed (e.g. `AA:BB:CC:DD:EE:FF` → `AABBCCDDEEFF`).
 
 ## Testing
 
-Unit tests live in `app/src/test/`. Use `FakeTransport` (`bluetooth/FakeTransport.kt`) to inject scripted responses for `ObdCommandExecutor`, `PidScanner`, and parser tests. Tests use `kotlinx-coroutines-test` (`runTest`).
+Unit tests live in `app/src/test/` (`unitTests.isReturnDefaultValues = true`, so `android.util.Log` is a no-op). Tests needing `AppSettings` build a real DataStore in a `TemporaryFolder` (see `PidScannerTest`). Use `FakeTransport` (`bluetooth/FakeTransport.kt`) to inject scripted responses for `ObdCommandExecutor`, `PidScanner`, and parser tests. Tests use `kotlinx-coroutines-test` (`runTest`).
 
 There are no Android instrumented tests beyond the scaffold (`androidTest/`).
 
@@ -79,12 +89,6 @@ To add a new Mode 01 PID: add an entry to `PidRegistry.definitions` in `obd/PidR
 
 To add a Mode 22 PID after reverse-engineering: add an entry to `Mode22Registry.definitions` in `obd/Mode22Registry.kt` following the same `PidDefinition` pattern.
 
-## HA Dashboard (Python)
+## HA Dashboard
 
-`ha-dashboard/` contains standalone Python scripts to create a Lovelace dashboard in Home Assistant:
-- `create_dashboard.py` — entry point
-- `ha_api.py` — HA WebSocket API wrapper
-- `dashboard_config.py` — dashboard layout definition
-- `test_config.py` — config validation
-
-Install deps: `pip install -r ha-dashboard/requirements.txt` (`websockets`, `requests`).
+There is no separate script: Settings → Webhook → "Copier le tableau de bord" generates a Lovelace YAML (`webhook/HaDashboardYaml.kt`) for the polled PIDs. User-facing setup guide (French): `docs/peugeot-407.md`.

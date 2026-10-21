@@ -10,21 +10,25 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.io.IOException
 import java.util.UUID
 
+/** GATT layout of a BLE ELM327 clone: one service, a write characteristic and a notify one (may be the same). */
+data class BleProfile(val service: UUID, val write: UUID, val notify: UUID) {
+    constructor(service: String, write: String, notify: String = write) :
+        this(UUID.fromString(service), UUID.fromString(write), UUID.fromString(notify))
+}
+
 class BleTransport(
     private val context: Context,
     private val device: BluetoothDevice,
-    serviceUuid: String = "0000fff0-0000-1000-8000-00805f9b34fb"
+    private val profiles: List<BleProfile> = KNOWN_PROFILES
 ) : BluetoothTransport {
 
-    private val serviceUUID = UUID.fromString(serviceUuid)
-    private val writeUUID = UUID.fromString("0000fff1-0000-1000-8000-00805f9b34fb")
-    private val notifyUUID = UUID.fromString("0000fff2-0000-1000-8000-00805f9b34fb")
     private val cccdUUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
     private val _isConnected = MutableStateFlow(false)
     override val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
     private var gatt: BluetoothGatt? = null
+    private var writeChar: BluetoothGattCharacteristic? = null
     private val responseChannel = Channel<String>(Channel.BUFFERED)
     private val responseBuffer = StringBuilder()
     private var connectLatch = CompletableDeferred<Unit>()
@@ -37,29 +41,41 @@ class BleTransport(
             } else {
                 _isConnected.value = false
                 if (!connectLatch.isCompleted) {
-                    connectLatch.completeExceptionally(IOException("BLE disconnected, status=$status"))
+                    connectLatch.completeExceptionally(IOException("BLE déconnecté, status=$status"))
                 }
             }
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
-                connectLatch.completeExceptionally(IOException("Service discovery failed: $status"))
+                connectLatch.completeExceptionally(IOException("Découverte des services échouée : $status"))
                 return
             }
-            val service = gatt.getService(serviceUUID)
-            val notifyChar = service?.getCharacteristic(notifyUUID)
-            if (notifyChar == null) {
-                connectLatch.completeExceptionally(IOException("Notify characteristic not found"))
+            val match = profiles.firstNotNullOfOrNull { p ->
+                val service = gatt.getService(p.service) ?: return@firstNotNullOfOrNull null
+                val w = service.getCharacteristic(p.write) ?: return@firstNotNullOfOrNull null
+                val n = service.getCharacteristic(p.notify) ?: return@firstNotNullOfOrNull null
+                w to n
+            }
+            if (match == null) {
+                connectLatch.completeExceptionally(IOException("Service OBD BLE inconnu sur cet adaptateur"))
                 return
             }
+            val (w, notifyChar) = match
+            writeChar = w
             gatt.setCharacteristicNotification(notifyChar, true)
             val descriptor = notifyChar.getDescriptor(cccdUUID)
             if (descriptor == null) {
-                connectLatch.completeExceptionally(IOException("CCCD descriptor not found"))
+                connectLatch.completeExceptionally(IOException("Descripteur CCCD introuvable"))
                 return
             }
-            gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+            val useIndication = notifyChar.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY == 0 &&
+                notifyChar.properties and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0
+            gatt.writeDescriptor(
+                descriptor,
+                if (useIndication) BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+                else BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            )
         }
 
         override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
@@ -67,7 +83,7 @@ class BleTransport(
                 _isConnected.value = true
                 connectLatch.complete(Unit)
             } else {
-                connectLatch.completeExceptionally(IOException("CCCD write failed: $status"))
+                connectLatch.completeExceptionally(IOException("Écriture CCCD échouée : $status"))
             }
         }
 
@@ -102,14 +118,36 @@ class BleTransport(
         gatt?.disconnect()
         gatt?.close()
         gatt = null
+        writeChar = null
     }
 
-    override suspend fun sendCommand(command: String): String {
+    override suspend fun sendCommand(command: String, timeoutMs: Long): String {
         val g = gatt ?: throw IOException("Not connected")
-        val service = g.getService(serviceUUID) ?: throw IOException("Service not found")
-        val writeChar = service.getCharacteristic(writeUUID) ?: throw IOException("Write char not found")
-        val result = g.writeCharacteristic(writeChar, "$command\r".toByteArray(Charsets.UTF_8), BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
-        if (result != BluetoothGatt.GATT_SUCCESS) throw IOException("BLE write failed: $result")
-        return withTimeout(5_000) { responseChannel.receive() }
+        val w = writeChar ?: throw IOException("Write char not found")
+        // Drop a late reply left over from a previous timed-out command
+        while (responseChannel.tryReceive().isSuccess) Unit
+        val writeType =
+            if (w.properties and BluetoothGattCharacteristic.PROPERTY_WRITE == 0 &&
+                w.properties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0)
+                BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+            else BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+        val result = g.writeCharacteristic(w, "$command\r".toByteArray(Charsets.UTF_8), writeType)
+        if (result != BluetoothStatusCodes.SUCCESS) throw IOException("BLE write failed: $result")
+        return withTimeout(timeoutMs) { responseChannel.receive() }
+    }
+
+    companion object {
+        val KNOWN_PROFILES = listOf(
+            // Vgate iCar Pro BLE 4.0 (and other Vgate BLE adapters)
+            BleProfile("e7810a71-73ae-499d-8c15-faa9aef0c3f2", "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f"),
+            // Generic ELM327 BLE clones
+            BleProfile(
+                "0000fff0-0000-1000-8000-00805f9b34fb",
+                "0000fff1-0000-1000-8000-00805f9b34fb",
+                "0000fff2-0000-1000-8000-00805f9b34fb"
+            ),
+            // HM-10 style modules
+            BleProfile("0000ffe0-0000-1000-8000-00805f9b34fb", "0000ffe1-0000-1000-8000-00805f9b34fb"),
+        )
     }
 }

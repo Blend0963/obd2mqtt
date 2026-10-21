@@ -64,22 +64,22 @@ fun PidSelectionScreen(
     if (showInfoDialog) {
         AlertDialog(
             onDismissRequest = { showInfoDialog = false },
-            title = { Text("Frequência de coleta") },
+            title = { Text("Fréquence de lecture") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "Rápida (${PidPoller.FAST_INTERVAL_SECONDS}s) — Limite de ${PidPoller.FAST_PID_LIMIT} PIDs\n" +
-                        "Valor coletado a cada segundo. Use para dados em tempo real como RPM e velocidade.",
+                        "Rapide (${PidPoller.FAST_INTERVAL_SECONDS} s) — ${PidPoller.FAST_PID_LIMIT} PIDs maximum\n" +
+                        "Lu chaque seconde. Pour les données de conduite en direct : régime, vitesse, charge…",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
-                        "Lenta (${PidPoller.SLOW_INTERVAL_SECONDS}s) — Sem limite\n" +
-                        "Valor coletado a cada 30 segundos. Para dados que mudam devagar, como temperatura e nível de combustível.",
+                        "Lent (${PidPoller.SLOW_INTERVAL_SECONDS} s) — Sans limite\n" +
+                        "Lu toutes les ${PidPoller.SLOW_INTERVAL_SECONDS} secondes. Pour les valeurs qui évoluent lentement : températures, carburant…",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
                         "Off\n" +
-                        "PID não é coletado nem enviado ao MQTT.",
+                        "Le PID n'est ni lu ni envoyé à Home Assistant.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -93,15 +93,15 @@ fun PidSelectionScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Seleção de PIDs") },
+                title = { Text("Sélection des PIDs") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
                     }
                 },
                 actions = {
                     IconButton(onClick = { showInfoDialog = true }) {
-                        Icon(Icons.Outlined.Info, contentDescription = "Informações sobre frequências")
+                        Icon(Icons.Outlined.Info, contentDescription = "À propos des fréquences")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors()
@@ -124,7 +124,7 @@ fun PidSelectionScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "Nenhum PID descoberto. Inicie o serviço com o carro conectado primeiro.",
+                    "Aucun PID détecté. Lancez d'abord la collecte avec le contact mis.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -168,26 +168,26 @@ fun PidSelectionScreen(
                     Column {
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             Text(
-                                "Rápida: $fastCount/${PidPoller.FAST_PID_LIMIT}",
+                                "Rapides : $fastCount/${PidPoller.FAST_PID_LIMIT}",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
                                 color = if (fastAtLimit) MaterialTheme.colorScheme.error
                                         else MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                "Lenta: $slowCount",
+                                "Lents : $slowCount",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium
                             )
                             Text(
-                                "Off: ${cachedPids.size - fastCount - slowCount}",
+                                "Off : ${cachedPids.size - fastCount - slowCount}",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         if (fastAtLimit) {
                             Text(
-                                "Limite de ${PidPoller.FAST_PID_LIMIT} PIDs rápidos atingido",
+                                "Limite de ${PidPoller.FAST_PID_LIMIT} PIDs rapides atteinte",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error
                             )
@@ -251,12 +251,12 @@ private fun PidRow(
                 onClick = { onModeChange(PidMode.FAST) },
                 shape = SegmentedButtonDefaults.itemShape(0, 3),
                 enabled = mode == PidMode.FAST || !fastAtLimit
-            ) { Text("Rápida", maxLines = 1, style = MaterialTheme.typography.labelSmall) }
+            ) { Text("Rapide", maxLines = 1, style = MaterialTheme.typography.labelSmall) }
             SegmentedButton(
                 selected = mode == PidMode.SLOW,
                 onClick = { onModeChange(PidMode.SLOW) },
                 shape = SegmentedButtonDefaults.itemShape(1, 3)
-            ) { Text("Lenta", maxLines = 1, style = MaterialTheme.typography.labelSmall) }
+            ) { Text("Lent", maxLines = 1, style = MaterialTheme.typography.labelSmall) }
             SegmentedButton(
                 selected = mode == PidMode.OFF,
                 onClick = { onModeChange(PidMode.OFF) },
