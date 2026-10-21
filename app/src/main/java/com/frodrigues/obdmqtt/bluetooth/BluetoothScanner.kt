@@ -44,7 +44,7 @@ sealed interface BondState {
 /**
  * In-app Bluetooth search and pairing, for car head units whose own Bluetooth screen
  * only lists phones: classic discovery (Vgate iCar Pro Bluetooth 3.0) and a BLE scan
- * (BLE 4.0 version) run together, and pairing answers the PIN itself (1234).
+ * (BLE 4.0 version) run together, and pairing answers the PIN itself (1234, then 0000).
  * Permissions are checked by the caller.
  */
 @SuppressLint("MissingPermission")
@@ -61,8 +61,11 @@ class BluetoothScanner(private val context: Context) {
     private val _bondState = MutableStateFlow<BondState>(BondState.Idle)
     val bondState: StateFlow<BondState> = _bondState.asStateFlow()
 
-    private var pin = DEFAULT_PIN
+    /** PINs still to try for the device being paired (Vgate: 1234, some clones: 0000). */
+    private var pins: List<String> = emptyList()
+    private var bondingAddress: String? = null
     private var registered = false
+    private val stopScan = Runnable { stop() }
 
     val isAvailable: Boolean get() = adapter != null
     val isEnabled: Boolean get() = adapter?.isEnabled == true
@@ -81,19 +84,36 @@ class BluetoothScanner(private val context: Context) {
                     // Head units may have no pairing dialog: answer the PIN ourselves
                     val variant = intent.getIntExtra(BluetoothDevice.EXTRA_PAIRING_VARIANT, -1)
                     Log.d(TAG, "Pairing request ${it.address} variant=$variant")
-                    if (variant == BluetoothDevice.PAIRING_VARIANT_PIN) {
+                    if (variant == BluetoothDevice.PAIRING_VARIANT_PIN && it.address == bondingAddress) {
+                        val pin = pins.firstOrNull() ?: DEFAULT_PINS.first()
                         runCatching { it.setPin(pin.toByteArray()) }
+                            .onSuccess { _ ->
+                                Log.d(TAG, "Answered PIN $pin")
+                                // Stop the head unit's own handler from answering a wrong default PIN
+                                if (isOrderedBroadcast) abortBroadcast()
+                            }
                             .onFailure { e -> Log.w(TAG, "setPin failed: ${e.message}") }
                     }
                 }
                 BluetoothDevice.ACTION_BOND_STATE_CHANGED -> device?.let {
                     val state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
                     val previous = intent.getIntExtra(BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE, BluetoothDevice.BOND_NONE)
-                    _bondState.value = when {
-                        state == BluetoothDevice.BOND_BONDED -> BondState.Bonded(it.address)
-                        state == BluetoothDevice.BOND_BONDING -> BondState.Bonding(it.address)
-                        previous == BluetoothDevice.BOND_BONDING -> BondState.Failed(it.address)
-                        else -> _bondState.value
+                    when {
+                        state == BluetoothDevice.BOND_BONDED -> {
+                            bondingAddress = null
+                            _bondState.value = BondState.Bonded(it.address)
+                        }
+                        state == BluetoothDevice.BOND_BONDING -> _bondState.value = BondState.Bonding(it.address)
+                        previous == BluetoothDevice.BOND_BONDING && it.address == bondingAddress -> {
+                            pins = pins.drop(1)
+                            if (pins.isNotEmpty()) {
+                                Log.d(TAG, "Pairing failed, retrying with PIN ${pins.first()}")
+                                handler.postDelayed({ startBond(it.address) }, RETRY_DELAY_MS)
+                            } else {
+                                bondingAddress = null
+                                _bondState.value = BondState.Failed(it.address)
+                            }
+                        }
                     }
                 }
             }
@@ -139,35 +159,43 @@ class BluetoothScanner(private val context: Context) {
         val classic = runCatching { a.startDiscovery() }.getOrDefault(false)
         val ble = runCatching { a.bluetoothLeScanner?.startScan(bleCallback) != null }.getOrDefault(false)
         Log.d(TAG, "Scan started: classic=$classic ble=$ble")
-        handler.postDelayed({ stop() }, durationMs)
+        handler.postDelayed(stopScan, durationMs)
     }
 
     fun stop() {
-        handler.removeCallbacksAndMessages(null)
+        handler.removeCallbacks(stopScan)
         val a = adapter ?: return
         runCatching { if (a.isDiscovering) a.cancelDiscovery() }
         runCatching { a.bluetoothLeScanner?.stopScan(bleCallback) }
         _scanning.value = false
     }
 
-    /** Starts pairing a classic adapter; progress in [bondState]. */
-    fun bond(address: String, pin: String = DEFAULT_PIN): Boolean {
+    /** Starts pairing a classic adapter, trying each PIN in turn; progress in [bondState]. */
+    fun bond(address: String, pins: List<String> = DEFAULT_PINS): Boolean {
         val a = adapter ?: return false
         register()
-        this.pin = pin
         stop()  // discovery slows pairing down
-        val device = a.getRemoteDevice(address)
-        if (device.bondState == BluetoothDevice.BOND_BONDED) {
+        if (a.getRemoteDevice(address).bondState == BluetoothDevice.BOND_BONDED) {
             _bondState.value = BondState.Bonded(address)
             return true
         }
+        this.pins = pins
+        bondingAddress = address
+        return startBond(address)
+    }
+
+    private fun startBond(address: String): Boolean {
         _bondState.value = BondState.Bonding(address)
-        val started = runCatching { device.createBond() }.getOrDefault(false)
-        if (!started) _bondState.value = BondState.Failed(address)
+        val started = adapter?.let { a -> runCatching { a.getRemoteDevice(address).createBond() }.getOrDefault(false) } == true
+        if (!started) {
+            bondingAddress = null
+            _bondState.value = BondState.Failed(address)
+        }
         return started
     }
 
     fun release() {
+        handler.removeCallbacksAndMessages(null)
         stop()
         if (registered) {
             runCatching { context.unregisterReceiver(receiver) }
@@ -206,7 +234,8 @@ class BluetoothScanner(private val context: Context) {
 
     companion object {
         private const val TAG = "BluetoothScanner"
-        const val DEFAULT_PIN = "1234"
+        val DEFAULT_PINS = listOf("1234", "0000")
+        private const val RETRY_DELAY_MS = 1_500L
         const val SCAN_DURATION_MS = 15_000L
     }
 }

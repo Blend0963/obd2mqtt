@@ -29,7 +29,8 @@ import com.frodrigues.obdmqtt.settings.BtTransport
 
 /**
  * Chooses the OBD adapter: already-paired devices, plus an in-app search and pairing
- * (PIN 1234) for car tablets whose Bluetooth screen only lists phones.
+ * (PIN 1234, then 0000) for car tablets whose Bluetooth screen only lists phones or
+ * answers a wrong default PIN without asking; an unpaired link is offered as a fallback.
  */
 @Composable
 fun BluetoothDeviceDialog(
@@ -43,6 +44,8 @@ fun BluetoothDeviceDialog(
     val scanning by scanner.scanning.collectAsState()
     val bondState by scanner.bondState.collectAsState()
     var message by remember { mutableStateOf<String?>(null) }
+    /** Classic adapter whose pairing failed: it can still be used over an unpaired link. */
+    var unpairedFallback by remember { mutableStateOf<ScannedDevice?>(null) }
     var btEnabled by remember { mutableStateOf(scanner.isEnabled) }
 
     DisposableEffect(Unit) {
@@ -90,7 +93,12 @@ fun BluetoothDeviceDialog(
                 onSelect(state.address, device?.name ?: state.address, BtTransport.CLASSIC)
                 onDismiss()
             }
-            is BondState.Failed -> message = "Appairage refusé ou expiré. Vérifiez que l'adaptateur est branché, contact mis, puis réessayez (code 1234)."
+            is BondState.Failed -> {
+                message = "Appairage refusé (codes 1234 et 0000 essayés). Beaucoup d'adaptateurs " +
+                    "fonctionnent quand même sans appairage :"
+                unpairedFallback = devices.find { it.address == state.address }
+                    ?: ScannedDevice(state.address, null, isBle = false, bonded = false)
+            }
             else -> Unit
         }
     }
@@ -99,7 +107,14 @@ fun BluetoothDeviceDialog(
         when {
             device.isBle -> { onSelect(device.address, device.name ?: device.address, BtTransport.BLE); onDismiss() }
             device.bonded -> { onSelect(device.address, device.name ?: device.address, BtTransport.CLASSIC); onDismiss() }
-            else -> if (!scanner.bond(device.address)) message = "Impossible de lancer l'appairage."
+            else -> {
+                message = null
+                unpairedFallback = null
+                if (!scanner.bond(device.address)) {
+                    message = "Impossible de lancer l'appairage."
+                    unpairedFallback = device
+                }
+            }
         }
     }
 
@@ -129,12 +144,22 @@ fun BluetoothDeviceDialog(
                 }
                 Text(
                     "Branchez l'adaptateur et mettez le contact. Un adaptateur non appairé l'est " +
-                    "automatiquement avec le code 1234.",
+                    "automatiquement par l'application (code 1234, puis 0000) : n'utilisez pas les " +
+                    "réglages Bluetooth de la tablette, qui envoient un mauvais code.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 message?.let {
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+                unpairedFallback?.let { device ->
+                    OutlinedButton(
+                        onClick = {
+                            onSelect(device.address, device.name ?: device.address, BtTransport.CLASSIC)
+                            onDismiss()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Utiliser ${device.name ?: device.address} sans appairage") }
                 }
                 if (bondState is BondState.Bonding) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
