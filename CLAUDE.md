@@ -19,7 +19,7 @@ Android app (Kotlin + Jetpack Compose) that reads OBD2 data from a vehicle via a
 ./gradlew :app:testDebugUnitTest --tests "com.frodrigues.obdmqtt.obd.PidScannerTest"  # single test class
 ```
 
-**Versioning**: `versionCode` = `GITHUB_RUN_NUMBER` (local fallback = 1). `versionName` = git tag (e.g. `v1.2.3` → `1.2.3`) on tag builds, `0.0.0-<sha7>` otherwise. Releases are created automatically on `v*` tag pushes via `.github/workflows/`.
+**Versioning**: `versionCode` = `GITHUB_RUN_NUMBER` (local fallback = 1). `versionName` = git tag (e.g. `v1.2.3` → `1.2.3`) on tag builds, `0.0.0-<sha7>` otherwise. `.github/workflows/release.yml` builds on every push to `main` (debug APK uploaded as the `apk` artifact) and on `v*` tags, which also create a GitHub Release. The signed release APK is only built when the `SIGNING_*` secrets exist.
 
 ## Architecture
 
