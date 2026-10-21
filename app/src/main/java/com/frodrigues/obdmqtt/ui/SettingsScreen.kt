@@ -56,6 +56,7 @@ fun SettingsScreen(
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
     val btMac by settings.btDeviceMac.collectAsState(initial = "")
+    val btName by settings.btDeviceName.collectAsState(initial = "")
     val autoStart by settings.autoStart.collectAsState(initial = false)
     val engineRunningOnly by settings.engineRunningOnly.collectAsState(initial = true)
     val publishMode by settings.publishMode.collectAsState(initial = PublishMode.WEBHOOK)
@@ -193,86 +194,14 @@ fun SettingsScreen(
 
     // BT device dialog
     if (showDeviceDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeviceDialog = false },
-            title = {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Adaptateur Bluetooth")
-                    IconButton(onClick = { refreshDevices() }) {
-                        Icon(
-                            Icons.Default.Refresh,
-                            contentDescription = "Actualiser",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+        BluetoothDeviceDialog(
+            currentAddress = btMac,
+            onSelect = { address, name, transport ->
+                scope.launch { settings.selectBtDevice(address, name, transport) }
             },
-            text = {
-                if (pairedDevices.isEmpty()) {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            "Aucun appareil appairé. Appairez le Vgate iCar Pro (code 1234) dans les réglages Bluetooth.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        TextButton(onClick = {
-                            context.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS))
-                            showDeviceDialog = false
-                        }) {
-                            Text("Ouvrir les réglages Bluetooth")
-                        }
-                    }
-                } else {
-                    Column(
-                        modifier = Modifier
-                            .heightIn(max = 400.dp)
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        pairedDevices.forEachIndexed { index, device ->
-                            val name = runCatching { device.name }.getOrDefault(device.address)
-                            val selected = device.address == btMac
-
-                            if (index > 0) HorizontalDivider(
-                                color = MaterialTheme.colorScheme.outlineVariant
-                            )
-                            ListItem(
-                                headlineContent = { Text(name) },
-                                supportingContent = {
-                                    Text(
-                                        device.address,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                },
-                                leadingContent = {
-                                    RadioButton(selected = selected, onClick = null)
-                                },
-                                modifier = Modifier.clickable(
-                                    role = Role.RadioButton,
-                                    onClickLabel = "Sélectionner $name"
-                                ) {
-                                    scope.launch {
-                                        settings.update {
-                                            this[AppSettings.BT_DEVICE_MAC] = device.address
-                                        }
-                                    }
-                                    showDeviceDialog = false
-                                }
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showDeviceDialog = false }) { Text("Fermer") }
+            onDismiss = {
+                showDeviceDialog = false
+                refreshDevices()
             }
         )
     }
@@ -308,9 +237,10 @@ fun SettingsScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val selectedDevice = pairedDevices.find { it.address == btMac }
-                    val selectedName = selectedDevice
-                        ?.let { runCatching { it.name }.getOrDefault(it.address) }
+                    // Devices found by the in-app BLE search aren't bonded: fall back to the saved name
+                    val selectedName = pairedDevices.find { it.address == btMac }
+                        ?.let { runCatching { it.name }.getOrNull() }
+                        ?: btName.takeIf { btMac.isNotBlank() }?.ifBlank { btMac }
 
                     OutlinedButton(
                         onClick = { showDeviceDialog = true },

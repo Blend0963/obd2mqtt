@@ -20,6 +20,9 @@ fun syncAutoStartToDeStorage(context: Context, enabled: Boolean) {
         .apply()
 }
 
+/** Bluetooth link to the adapter: AUTO follows Android's device type (bonded devices). */
+enum class BtTransport { AUTO, CLASSIC, BLE }
+
 /** How readings reach Home Assistant. */
 enum class PublishMode { MQTT, WEBHOOK }
 
@@ -40,7 +43,8 @@ data class AppConfig(
     /** Only query the ECU when the alternator is charging, so a parked car is never woken up. */
     val engineRunningOnly: Boolean = true,
     /** Optional HA long-lived token: lets the app read the "clear faults" button state from HA. */
-    val haToken: String = ""
+    val haToken: String = "",
+    val btTransport: BtTransport = BtTransport.AUTO
 ) {
     val mqttClientId: String get() = "obd2_android_${btDeviceMac.replace(":", "")}"
 }
@@ -52,6 +56,8 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
         const val DE_KEY_AUTO_START = "autoStart"
 
         val BT_DEVICE_MAC = stringPreferencesKey("btDeviceMac")
+        val BT_DEVICE_NAME = stringPreferencesKey("btDeviceName")
+        val BT_TRANSPORT = stringPreferencesKey("btTransport")
         val MQTT_HOST = stringPreferencesKey("mqttHost")
         val MQTT_PORT = intPreferencesKey("mqttPort")
         val MQTT_USER = stringPreferencesKey("mqttUser")
@@ -104,6 +110,19 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
     }
 
     val btDeviceMac: Flow<String> = dataStore.data.map { it[BT_DEVICE_MAC] ?: "" }
+    val btDeviceName: Flow<String> = dataStore.data.map { it[BT_DEVICE_NAME] ?: "" }
+    val btTransport: Flow<BtTransport> = dataStore.data.map { prefs ->
+        prefs[BT_TRANSPORT]?.let { runCatching { BtTransport.valueOf(it) }.getOrNull() } ?: BtTransport.AUTO
+    }
+
+    /** Remembers the adapter chosen in the app (bonded list or in-app scan). */
+    suspend fun selectBtDevice(address: String, name: String, transport: BtTransport) {
+        update {
+            this[BT_DEVICE_MAC] = address
+            this[BT_DEVICE_NAME] = name
+            this[BT_TRANSPORT] = transport.name
+        }
+    }
     val mqttHost: Flow<String> = dataStore.data.map { it[MQTT_HOST] ?: "" }
     val mqttPort: Flow<Int> = dataStore.data.map { it[MQTT_PORT] ?: 1883 }
     val mqttUser: Flow<String> = dataStore.data.map { it[MQTT_USER] ?: "" }
@@ -140,7 +159,8 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
         webhookIntervalSeconds = webhookIntervalSeconds.first(),
         obdProtocol = obdProtocol.first(),
         engineRunningOnly = engineRunningOnly.first(),
-        haToken = haToken.first()
+        haToken = haToken.first(),
+        btTransport = btTransport.first()
     )
 
     val cachedPids: Flow<Set<Int>> = dataStore.data.map { prefs ->

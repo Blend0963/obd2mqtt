@@ -208,7 +208,7 @@ class OBDCollectorService : LifecycleService() {
             ?: throw IllegalStateException("Bluetooth indisponible")
 
         val device = bluetoothAdapter.getRemoteDevice(config.btDeviceMac)
-        val transport = BluetoothTransportFactory.create(device, applicationContext)
+        val transport = BluetoothTransportFactory.create(device, applicationContext, config.btTransport)
         transport.connect()
 
         val sink = TelemetrySink.create(config, onStatus = { serverStatus.value = it }, onClearRequest = ::requestClearFaults)

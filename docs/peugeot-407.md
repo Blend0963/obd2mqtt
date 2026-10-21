@@ -20,7 +20,7 @@ Guide d'installation pour envoyer en direct les données OBD2 de la Peugeot 407 
 
 Dans l'application, ouvrez **Réglages** :
 
-1. **Adaptateur OBD2** : choisissez le Vgate dans la liste.
+1. **Adaptateur OBD2** : choisissez le Vgate dans la liste. S'il n'y est pas (par exemple sur une tablette de voiture dont l'écran Bluetooth n'affiche que les téléphones), appuyez sur **Rechercher les adaptateurs** : l'application active le Bluetooth, cherche elle-même l'adaptateur (Bluetooth classique et BLE) et l'appaire avec le code 1234. Sur Android 8 à 11, la recherche demande l'autorisation de localisation et que la localisation soit activée.
 2. **Connexion à Home Assistant** : laissez **Webhook HTTPS**.
 3. **URL de Home Assistant** : votre adresse externe, par exemple `https://maison.exemple.fr`.
 4. **ID du webhook** : il est généré automatiquement. C'est le seul secret, ne le partagez pas.
@@ -119,6 +119,7 @@ Le niveau de carburant, le kilométrage, la température d'huile ou la consommat
 | Reste sur « Moteur arrêté » alors que le moteur tourne | Batterie ou alternateur faibles (moins de 13,3 V moteur tournant) : désactivez **Lire seulement moteur tournant** et faites contrôler la charge |
 | « Refusé par le calculateur » à l'effacement | Coupez le moteur en laissant le contact, puis recommencez |
 | Le bouton HA n'efface rien | Jeton absent ou invalide dans l'application, ou bouton pressé voiture coupée depuis plus de 2 minutes |
+| La recherche dans l'application ne trouve pas le Vgate | Adaptateur branché, contact mis, localisation activée (Android 8 à 11). Si rien n'apparaît, même pas un téléphone, la puce Bluetooth de la tablette est réservée au téléphone : utilisez le téléphone pour la collecte |
 | « Service OBD BLE inconnu » | Version BLE non reconnue : signalez le modèle exact de l'adaptateur |
 | Home Assistant « Hors ligne », mais OBD2 « En ligne » | Pas de réseau, ou URL incorrecte. Les mesures reprennent dès le retour du réseau, sans couper le Bluetooth |
 | Capteurs « indisponible » dans HA | La collecte est arrêtée, ou la configuration n'a pas été rechargée (étape 3) |
