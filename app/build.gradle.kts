@@ -5,7 +5,8 @@ plugins {
 
 // ── Versioning ────────────────────────────────────────────────────────────────
 // versionCode : GITHUB_RUN_NUMBER (auto-incrementing integer); local fallback = 1
-// versionName : tag build → "1.2.3" (v-prefix stripped)
+// versionName : APP_VERSION_NAME if set (CI release run), else
+//               tag build → "1.2.3" (v-prefix stripped)
 //               CI non-tag → "0.0.0-<sha7>"
 //               local      → "0.0.0-<gitSha7>"
 fun gitShortSha(): String = try {
@@ -22,7 +23,7 @@ val ciSha         = System.getenv("GITHUB_SHA")?.take(7)
 
 val appVersionCode = ciRunNumber ?: 1
 
-val appVersionName = when {
+val appVersionName = System.getenv("APP_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: when {
     ciRefType == "tag" && ciRefName != null -> ciRefName.removePrefix("v")
     ciRunNumber != null                     -> "0.0.0-${ciSha ?: gitShortSha()}"
     else                                    -> "0.0.0-${gitShortSha()}"

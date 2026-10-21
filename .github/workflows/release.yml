@@ -7,6 +7,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version à publier (ex. v1.0.0) : crée le tag et la release. Vide = simple build."
+        required: false
+        default: ""
 
 jobs:
   build:
@@ -21,6 +26,29 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history and tags for release notes
+
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            TAG="$GITHUB_REF_NAME"
+          elif [ -n "$INPUT_VERSION" ]; then
+            TAG="v${INPUT_VERSION#v}"
+            if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+              echo "::error::Le tag $TAG existe déjà"; exit 1
+            fi
+          else
+            TAG=""
+          fi
+          if [ -n "$TAG" ]; then VERSION="${TAG#v}"; else VERSION="0.0.0-${GITHUB_SHA::7}"; fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # Read by app/build.gradle.kts for versionName
+          echo "APP_VERSION_NAME=$VERSION" >> "$GITHUB_ENV"
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -49,9 +77,10 @@ jobs:
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
 
       - name: Rename APKs
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           APP_ID="com.frodrigues.obdmqtt"
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then VERSION="${GITHUB_REF_NAME#v}"; else VERSION="0.0.0-${GITHUB_SHA::7}"; fi
           mv app/build/outputs/apk/debug/*.apk "app/build/outputs/apk/debug/${APP_ID}-${VERSION}-debug.apk"
           if [ "$HAS_SIGNING" = "true" ]; then
             mv app/build/outputs/apk/release/*.apk "app/build/outputs/apk/release/${APP_ID}-${VERSION}-release.apk"
@@ -63,36 +92,31 @@ jobs:
           name: apk
           path: app/build/outputs/apk/**/*.apk
 
-      - name: Fetch tags for release notes
-        if: startsWith(github.ref, 'refs/tags/')
-        run: git fetch --tags --unshallow || git fetch --tags
-
       - name: Generate release notes from commits
-        if: startsWith(github.ref, 'refs/tags/')
-        id: release_notes
+        if: steps.version.outputs.tag != ''
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
-          # Get tag name
-          TAG="${GITHUB_REF#refs/tags/}"
-
-          # Get previous tag (if any)
+          # Previous release tag (if any), excluding the one being published
           PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${TAG}$" | head -1)
 
           if [ -n "$PREV_TAG" ]; then
-            NOTES=$(git log "${PREV_TAG}..${TAG}" --pretty=format:"- %s" --no-merges)
+            NOTES=$(git log "${PREV_TAG}..${GITHUB_SHA}" --pretty=format:"- %s" --no-merges)
           else
-            NOTES=$(git log --pretty=format:"- %s" --no-merges)
+            NOTES=$(git log "${GITHUB_SHA}" --pretty=format:"- %s" --no-merges)
           fi
 
           # Write to file to handle multiline
           echo "$NOTES" > release_notes.txt
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: steps.version.outputs.tag != ''
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.release_notes.outputs.tag }}
-          name: Release ${{ steps.release_notes.outputs.tag }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          # Creates the tag on this commit when it doesn't exist yet (manual run)
+          target_commitish: ${{ github.sha }}
+          name: Release ${{ steps.version.outputs.tag }}
           body_path: release_notes.txt
           draft: false
           prerelease: false
