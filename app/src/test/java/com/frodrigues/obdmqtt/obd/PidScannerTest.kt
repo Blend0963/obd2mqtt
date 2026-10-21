@@ -34,7 +34,38 @@ class PidScannerTest {
     fun tearDown() = dataStoreScope.cancel()
 
     @Test
-    fun `brute-force scan keeps responding pids and adapter voltage`() = runTest {
+    fun `support bitmasks give the pids in a few requests`() = runTest {
+        // 0100: PIDs 04, 05 (byte 0 = 0x18) and 0C, 0D (byte 1 = 0x18); 0x20 not announced
+        val transport = FakeTransport(
+            responses = mapOf(
+                "0100" to "41 00 18 18 00 00",
+                "ATRV" to "12.4V"
+            )
+        )
+        val supported = PidScanner(ObdCommandExecutor(transport), settings).scan()
+
+        assertEquals(setOf(0x04, 0x05, 0x0C, 0x0D, PidRegistry.ADAPTER_VOLTAGE), supported)
+        assertEquals(listOf("0100", "ATRV"), transport.sentCommands)
+        assertEquals(supported, settings.cachedPids.first())
+    }
+
+    @Test
+    fun `next bitmask is read only when announced`() = runTest {
+        // 0100 announces 0x20 (last bit); 0120 announces 0x2F (fuel level) only
+        val transport = FakeTransport(
+            responses = mapOf(
+                "0100" to "41 00 00 10 00 01",
+                "0120" to "41 20 00 02 00 00"
+            )
+        )
+        val supported = PidScanner(ObdCommandExecutor(transport), settings).scan()
+
+        assertEquals(setOf(0x0C, 0x2F), supported)
+        assertFalse("0140" in transport.sentCommands)
+    }
+
+    @Test
+    fun `falls back to probing each pid without bitmask`() = runTest {
         val transport = FakeTransport(
             responses = mapOf(
                 "010C" to "41 0C 0F A0",
@@ -48,7 +79,6 @@ class PidScannerTest {
         val supported = scanner.scan()
 
         assertEquals(setOf(0x05, 0x0C, 0x0D, PidRegistry.ADAPTER_VOLTAGE), supported)
-        assertFalse("support bitmask PIDs are not probed", "0100" in transport.sentCommands)
         assertEquals(supported, settings.cachedPids.first())
     }
 

@@ -24,7 +24,8 @@ import java.util.*
 fun MainScreen(
     viewModel: MainViewModel,
     onNavigateToSettings: () -> Unit,
-    onNavigateToDiagnostics: () -> Unit = {}
+    onNavigateToDiagnostics: () -> Unit = {},
+    onNavigateToLog: () -> Unit = {}
 ) {
     val serviceStatus by viewModel.serviceStatus.collectAsState()
     val pidCount by viewModel.activePidCount.collectAsState()
@@ -34,6 +35,7 @@ fun MainScreen(
     val publishMode by viewModel.settings.publishMode.collectAsState(initial = PublishMode.WEBHOOK)
     val pidReadings by viewModel.pidReadings.collectAsState()
     val obdProtocol by viewModel.obdProtocolLabel.collectAsState()
+    val statusText by viewModel.statusText.collectAsState()
     val diagnostics by viewModel.diagnostics.collectAsState()
     val engineOffVoltage by viewModel.engineOffVoltage.collectAsState()
 
@@ -107,6 +109,23 @@ fun MainScreen(
                         status = serverStatus,
                         modifier = Modifier.weight(1f)
                     )
+                }
+
+                // ── Current step (also in the notification, which car units may hide) ──
+                if (statusText.isNotBlank()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = onNavigateToLog) { Text("Journal") }
+                    }
                 }
 
                 // ── Engine off: the ECU is left alone until the alternator charges ──

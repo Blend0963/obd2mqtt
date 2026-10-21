@@ -13,6 +13,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.frodrigues.obdmqtt.ui.DiagnosticScreen
+import com.frodrigues.obdmqtt.ui.LogScreen
 import com.frodrigues.obdmqtt.ui.MainScreen
 import com.frodrigues.obdmqtt.ui.MainViewModel
 import com.frodrigues.obdmqtt.ui.PidSelectionScreen
@@ -63,8 +64,12 @@ private fun AppNavigation() {
             MainScreen(
                 viewModel = viewModel,
                 onNavigateToSettings = { navController.navigate("settings") },
-                onNavigateToDiagnostics = { navController.navigate("diagnostics") }
+                onNavigateToDiagnostics = { navController.navigate("diagnostics") },
+                onNavigateToLog = { navController.navigate("log") }
             )
+        }
+        composable("log") {
+            LogScreen(onBack = { navController.popBackStack() })
         }
         composable("diagnostics") {
             DiagnosticScreen(

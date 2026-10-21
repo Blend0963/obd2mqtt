@@ -3,6 +3,7 @@ package com.frodrigues.obdmqtt.bluetooth
 import android.bluetooth.*
 import android.content.Context
 import android.os.Build
+import com.frodrigues.obdmqtt.util.DebugLog
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -59,10 +60,12 @@ class BleTransport(
                 w to n
             }
             if (match == null) {
+                DebugLog.add("BLE : aucun service OBD connu (${gatt.services.joinToString { it.uuid.toString().take(8) }})")
                 connectLatch.completeExceptionally(IOException("Service OBD BLE inconnu sur cet adaptateur"))
                 return
             }
             val (w, notifyChar) = match
+            DebugLog.add("BLE : service ${w.service.uuid} trouvé")
             writeChar = w
             gatt.setCharacteristicNotification(notifyChar, true)
             val descriptor = notifyChar.getDescriptor(cccdUUID)

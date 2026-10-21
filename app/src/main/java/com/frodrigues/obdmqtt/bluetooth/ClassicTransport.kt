@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
 import android.util.Log
+import com.frodrigues.obdmqtt.util.DebugLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -56,6 +57,7 @@ class ClassicTransport(private val device: BluetoothDevice) : BluetoothTransport
             try {
                 try { s.connect() } finally { watchdog.cancel() }
                 Log.d(TAG, "Connected with ${factory.name} socket")
+                DebugLog.add("Bluetooth connecté (socket ${factory.name})")
                 socket = s
                 inputStream = s.inputStream
                 outputStream = s.outputStream
@@ -64,6 +66,7 @@ class ClassicTransport(private val device: BluetoothDevice) : BluetoothTransport
             } catch (e: IOException) {
                 runCatching { s.close() }
                 Log.w(TAG, "${factory.name} socket failed: ${e.message}")
+                DebugLog.add("Socket ${factory.name} : échec (${e.message})")
                 lastError = e
             }
         }
