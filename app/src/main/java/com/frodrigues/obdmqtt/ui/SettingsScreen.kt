@@ -55,6 +55,7 @@ fun SettingsScreen(
 
     val btMac by settings.btDeviceMac.collectAsState(initial = "")
     val autoStart by settings.autoStart.collectAsState(initial = false)
+    val engineRunningOnly by settings.engineRunningOnly.collectAsState(initial = true)
     val publishMode by settings.publishMode.collectAsState(initial = PublishMode.WEBHOOK)
 
     // Local text field state — avoids cursor-jump bug from DataStore re-emission
@@ -67,6 +68,7 @@ fun SettingsScreen(
     var localDeviceManufacturer by rememberSaveable { mutableStateOf("") }
     var localHaUrl by rememberSaveable { mutableStateOf("") }
     var localWebhookId by rememberSaveable { mutableStateOf("") }
+    var localHaToken by rememberSaveable { mutableStateOf("") }
     var localWebhookInterval by rememberSaveable {
         mutableStateOf(AppSettings.DEFAULT_WEBHOOK_INTERVAL_SECONDS.toString())
     }
@@ -89,6 +91,7 @@ fun SettingsScreen(
                 generateWebhookId().also { id -> settings.update { this[AppSettings.WEBHOOK_ID] = id } }
             }
             localWebhookInterval = snap.webhookIntervalSeconds.toString()
+            localHaToken = snap.haToken
             fieldsInitialized = true
         }
     }
@@ -125,7 +128,8 @@ fun SettingsScreen(
         haUrl = localHaUrl,
         webhookId = localWebhookId,
         webhookIntervalSeconds = localWebhookInterval.toIntOrNull()
-            ?: AppSettings.DEFAULT_WEBHOOK_INTERVAL_SECONDS
+            ?: AppSettings.DEFAULT_WEBHOOK_INTERVAL_SECONDS,
+        haToken = localHaToken
     )
 
     fun saveWebhookId(id: String) {
@@ -415,6 +419,23 @@ fun SettingsScreen(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth()
                     )
+                    OutlinedTextField(
+                        value = localHaToken,
+                        onValueChange = { localHaToken = it
+                            scope.launch { settings.update { this[AppSettings.HA_TOKEN] = it.trim() } }
+                        },
+                        label = { Text("Jeton d'accès Home Assistant (facultatif)") },
+                        supportingText = {
+                            Text(
+                                "Uniquement pour le bouton « Effacer les défauts » dans Home Assistant. " +
+                                "Créez-le dans HA → Profil → Sécurité → Jetons d'accès longue durée, " +
+                                "idéalement avec un utilisateur dédié non administrateur."
+                            )
+                        },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -464,10 +485,10 @@ fun SettingsScreen(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Text(
-                        text = "1. Copiez la configuration et collez-la dans configuration.yaml, puis rechargez " +
-                               "les entités de modèle. 2. Copiez le tableau de bord et collez-le dans l'éditeur " +
-                               "de configuration brute d'un nouveau tableau de bord. À refaire après un " +
-                               "changement de PIDs ou d'ID.",
+                        text = "1. Copiez la configuration dans un fichier du dossier /config/packages/ " +
+                               "de Home Assistant (voir l'en-tête du texte copié), puis redémarrez HA. " +
+                               "2. Copiez le tableau de bord dans l'éditeur de configuration brute d'un " +
+                               "nouveau tableau de bord. À refaire après un changement de PIDs, d'ID ou de jeton.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -692,6 +713,36 @@ fun SettingsScreen(
                             settings.update { this[AppSettings.AUTO_START] = newValue }
                             syncAutoStartToDeStorage(context, newValue)
                         }
+                    }
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ListItem(
+                    headlineContent = { Text("Lire seulement moteur tournant") },
+                    supportingContent = {
+                        Text(
+                            text = "Ne réveille pas les calculateurs voiture garée : l'application mesure d'abord " +
+                                   "la tension batterie et n'interroge la voiture que si l'alternateur charge " +
+                                   "(plus de 13,3 V). Recommandé si l'adaptateur reste branché.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = engineRunningOnly,
+                            onCheckedChange = { enabled ->
+                                scope.launch { settings.update { this[AppSettings.ENGINE_RUNNING_ONLY] = enabled } }
+                            }
+                        )
+                    },
+                    colors = ListItemDefaults.colors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    ),
+                    modifier = Modifier.clickable(
+                        role = Role.Switch,
+                        onClickLabel = "Lire seulement moteur tournant"
+                    ) {
+                        scope.launch { settings.update { this[AppSettings.ENGINE_RUNNING_ONLY] = !engineRunningOnly } }
                     }
                 )
             }

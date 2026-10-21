@@ -19,7 +19,7 @@ Android app (Kotlin + Jetpack Compose) that reads OBD2 data from a vehicle via a
 ./gradlew :app:testDebugUnitTest --tests "com.frodrigues.obdmqtt.obd.PidScannerTest"  # single test class
 ```
 
-**Versioning**: `versionCode` = `GITHUB_RUN_NUMBER` (local fallback = 1). `versionName` = git tag (e.g. `v1.2.3` → `1.2.3`) on tag builds, `0.0.0-<sha7>` otherwise. Releases are created automatically on `v*` tag pushes via `.github/workflows/`.
+**Versioning**: `versionCode` = `GITHUB_RUN_NUMBER` (local fallback = 1). `versionName` = git tag (e.g. `v1.2.3` → `1.2.3`) on tag builds, `0.0.0-<sha7>` otherwise. `.github/workflows/release.yml` builds on every push to `main` (debug APK uploaded as the `apk` artifact) and on `v*` tags, which also create a GitHub Release. The signed release APK is only built when the `SIGNING_*` secrets exist.
 
 ## Architecture
 
@@ -53,6 +53,12 @@ ELM327 ──BT──► BluetoothTransport (Classic/BLE)
 **`PidPoller`** — Polls `fastPids` every 1s cycle plus a slice of `slowPids`, so each slow PID is read once per `SLOW_INTERVAL_SECONDS` (10s) without bursts. Emits `PidReading` via a `Flow`. Commands come from `PidRegistry.command(pid)`; pseudo-PID `PidRegistry.ADAPTER_VOLTAGE` (0x100) reads the battery voltage with `ATRV`.
 
 **`ObdProtocol`** — ELM327 protocol numbers. Default `AUTO` (`ATSP0`) because the target car (Peugeot 407) exists in CAN and KWP2000 variants. Headers are off (`ATH0`) so KWP headers/checksums never mix with data bytes. Mode 22 scanning is skipped while `Mode22Registry.definitions` is empty.
+
+**Diagnostics** (`obd/Diagnostics.kt`, `obd/DtcDescriptions.kt`) — `DtcReader` reads PID 01 01 (MIL + readiness), Mode 03 (stored) and Mode 07 (pending) every 60 s in a coroutine alongside `PidPoller`; `ObdCommandExecutor.sendCommand` holds a `Mutex` so both share the adapter. `DtcParser` handles CAN (count byte, multi-frame `0:`/`1:` lines) and KWP (3 codes per line). Mode 04 clear requests come from the app, the MQTT `button`, or (webhook mode) an HA `input_button` read through the REST API with an optional long-lived token (`HaApiClient` + `ClearButtonWatcher`: only presses < 2 min old count). Requests go through `OBDCollectorService.requestClearFaults()` / `requestDiagnosticsRead()`.
+
+**Engine-off gate** — With `engineRunningOnly` (default), the service resets the adapter and reads `ATRV` before touching any ECU; below `ENGINE_RUNNING_VOLTAGE` (13.3 V) it throws `EngineOffException`, shows `WAITING_ENGINE` and rechecks every 5 min. A clear/read request wakes it and bypasses the gate once.
+
+**`HaEntities`** (`webhook/`) — Single source of HA names/entity IDs (sensors, diagnostics, `input_button`) used by the YAML package, the dashboard and the button poller.
 
 **Language** — UI strings, notifications, error messages and PID names (which become HA sensor names) are in French, hardcoded in Compose (no string resources).
 

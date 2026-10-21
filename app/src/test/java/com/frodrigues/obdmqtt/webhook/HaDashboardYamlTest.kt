@@ -21,10 +21,10 @@ class HaDashboardYamlTest {
 
     @Test
     fun `slugify matches Home Assistant entity ids`() {
-        assertEquals("peugeot_407_regime_moteur", HaDashboardYaml.slugify("Peugeot 407 Régime moteur"))
+        assertEquals("peugeot_407_regime_moteur", HaEntities.slugify("Peugeot 407 Régime moteur"))
         assertEquals("peugeot_407_temperature_liquide_de_refroidissement",
-            HaDashboardYaml.slugify("Peugeot 407 Température liquide de refroidissement"))
-        assertEquals("peugeot_407_pid_0x9a", HaDashboardYaml.slugify("Peugeot 407 PID 0x9A"))
+            HaEntities.slugify("Peugeot 407 Température liquide de refroidissement"))
+        assertEquals("peugeot_407_pid_0x9a", HaEntities.slugify("Peugeot 407 PID 0x9A"))
     }
 
     @Test
@@ -54,7 +54,7 @@ class HaDashboardYamlTest {
         pids.forEach { pid ->
             val name = "${config.deviceName} ${PidRegistry.getOrUnknown(pid).name}"
             assertTrue(sensors.contains("name: \"$name\""))
-            assertEquals("sensor." + HaDashboardYaml.slugify(name), HaDashboardYaml.entityId(config, pid))
+            assertEquals("sensor." + HaEntities.slugify(name), HaDashboardYaml.entityId(config, pid))
         }
     }
 }

@@ -94,7 +94,7 @@ class WebhookTest {
         assertTrue(yaml.contains("webhook_id: \"$id\""))
         assertTrue(yaml.contains("local_only: false"))
         assertTrue(yaml.contains("allowed_methods: [POST]"))
-        assertEquals(3, Regex("- name: ").findAll(yaml).count())
+        assertEquals(3, Regex("trigger\\.json\\.pids\\.get\\(").findAll(yaml).count())
         assertTrue(yaml.contains("unique_id: \"obd2_AABBCCDDEEFF_0C\""))
         assertTrue(yaml.contains("name: \"Test \\\"Car\\\" Régime moteur\""))
         assertTrue(yaml.contains("state: \"{{ trigger.json.pids.get('0D') }}\""))

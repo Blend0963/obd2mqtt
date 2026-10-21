@@ -2,8 +2,11 @@ name: Build & Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
+  workflow_dispatch:
 
 jobs:
   build:
@@ -11,6 +14,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      # Release signing is optional: without these secrets only the debug APK is built
+      HAS_SIGNING: ${{ secrets.SIGNING_KEYSTORE_BASE64 != '' }}
 
     steps:
       - name: Checkout
@@ -27,12 +33,14 @@ jobs:
         run: chmod +x gradlew
 
       - name: Decode keystore
+        if: env.HAS_SIGNING == 'true'
         run: echo "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" | base64 -d > release.jks
 
       - name: Build Debug APK
         run: ./gradlew assembleDebug
 
       - name: Build Release APK
+        if: env.HAS_SIGNING == 'true'
         run: ./gradlew assembleRelease
         env:
           SIGNING_KEYSTORE_PATH: ${{ github.workspace }}/release.jks
@@ -43,11 +51,24 @@ jobs:
       - name: Rename APKs
         run: |
           APP_ID="com.frodrigues.obdmqtt"
-          VERSION="${GITHUB_REF_NAME#v}"
-          mv app/build/outputs/apk/debug/*.apk   "app/build/outputs/apk/debug/${APP_ID}-${VERSION}-debug.apk"
-          mv app/build/outputs/apk/release/*.apk "app/build/outputs/apk/release/${APP_ID}-${VERSION}-release.apk"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then VERSION="${GITHUB_REF_NAME#v}"; else VERSION="0.0.0-${GITHUB_SHA::7}"; fi
+          mv app/build/outputs/apk/debug/*.apk "app/build/outputs/apk/debug/${APP_ID}-${VERSION}-debug.apk"
+          if [ "$HAS_SIGNING" = "true" ]; then
+            mv app/build/outputs/apk/release/*.apk "app/build/outputs/apk/release/${APP_ID}-${VERSION}-release.apk"
+          fi
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: app/build/outputs/apk/**/*.apk
+
+      - name: Fetch tags for release notes
+        if: startsWith(github.ref, 'refs/tags/')
+        run: git fetch --tags --unshallow || git fetch --tags
 
       - name: Generate release notes from commits
+        if: startsWith(github.ref, 'refs/tags/')
         id: release_notes
         run: |
           # Get tag name
@@ -67,6 +88,7 @@ jobs:
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release_notes.outputs.tag }}
@@ -74,6 +96,7 @@ jobs:
           body_path: release_notes.txt
           draft: false
           prerelease: false
+          fail_on_unmatched_files: false
           files: |
             app/build/outputs/apk/debug/*.apk
             app/build/outputs/apk/release/*.apk

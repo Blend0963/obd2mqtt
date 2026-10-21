@@ -11,6 +11,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.frodrigues.obdmqtt.ui.DiagnosticScreen
 import com.frodrigues.obdmqtt.ui.MainScreen
 import com.frodrigues.obdmqtt.ui.MainViewModel
 import com.frodrigues.obdmqtt.ui.PidSelectionScreen
@@ -52,7 +53,14 @@ private fun AppNavigation() {
         composable("main") {
             MainScreen(
                 viewModel = viewModel,
-                onNavigateToSettings = { navController.navigate("settings") }
+                onNavigateToSettings = { navController.navigate("settings") },
+                onNavigateToDiagnostics = { navController.navigate("diagnostics") }
+            )
+        }
+        composable("diagnostics") {
+            DiagnosticScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() }
             )
         }
         composable("settings") {

@@ -2,12 +2,10 @@ package com.frodrigues.obdmqtt.webhook
 
 import com.frodrigues.obdmqtt.obd.PidRegistry
 import com.frodrigues.obdmqtt.settings.AppConfig
-import java.text.Normalizer
 
 /**
  * Generates a Lovelace dashboard (raw configuration editor YAML) for the sensors
- * created by [HaWebhookYaml]. Entity IDs are derived from sensor names exactly
- * like Home Assistant does: "Peugeot 407 Régime moteur" → sensor.peugeot_407_regime_moteur.
+ * created by [HaWebhookYaml], with entity IDs from [HaEntities].
  */
 object HaDashboardYaml {
 
@@ -37,17 +35,17 @@ object HaDashboardYaml {
         "Moteur" to listOf(0x04, 0x11, 0x0B, 0x10),
     )
 
-    fun entityId(config: AppConfig, pid: Int): String =
-        "sensor." + slugify("${config.deviceName} ${PidRegistry.getOrUnknown(pid).name}")
+    fun entityId(config: AppConfig, pid: Int): String = HaEntities(config).pidEntityId(pid)
 
     fun generate(config: AppConfig, pids: Set<Int>): String = buildString {
+        val ha = HaEntities(config)
         appendLine("# Tableau de bord ${config.deviceName}")
         appendLine("# Paramètres → Tableaux de bord → Ajouter → Nouveau tableau de bord,")
         appendLine("# puis ⋮ → Modifier → ⋮ → Éditeur de configuration brute, et coller ce contenu.")
         appendLine("title: ${q(config.deviceName)}")
         appendLine("views:")
         appendLine("  - title: ${q(config.deviceName)}")
-        appendLine("    path: ${slugify(config.deviceName).replace('_', '-').ifBlank { "voiture" }}")
+        appendLine("    path: ${HaEntities.slugify(config.deviceName).replace('_', '-').ifBlank { "voiture" }}")
         appendLine("    icon: mdi:car")
         appendLine("    cards:")
 
@@ -71,6 +69,8 @@ object HaDashboardYaml {
             }
         }
 
+        appendDiagnostics(ha, withClearButton = config.haToken.isNotBlank())
+
         HISTORY_GROUPS.forEach { (title, group) ->
             val present = group.filter { it in pids }
             if (present.isEmpty()) return@forEach
@@ -93,13 +93,53 @@ object HaDashboardYaml {
         }
     }
 
-    /** Same rules as Home Assistant's slugify: strip accents, lowercase, non-alphanumerics → "_". */
-    fun slugify(text: String): String =
-        Normalizer.normalize(text, Normalizer.Form.NFKD)
-            .replace(Regex("\\p{M}+"), "")
-            .lowercase()
-            .replace(Regex("[^a-z0-9]+"), "_")
-            .trim('_')
+    private fun StringBuilder.appendDiagnostics(ha: HaEntities, withClearButton: Boolean) {
+        appendLine("      - type: entities")
+        appendLine("        title: Diagnostic moteur")
+        appendLine("        show_header_toggle: false")
+        appendLine("        entities:")
+        appendLine("          - entity: ${ha.milEntityId}")
+        appendLine("            name: Voyant moteur")
+        appendLine("          - entity: ${ha.faultCodesEntityId}")
+        appendLine("            name: Codes défaut")
+        appendLine("          - entity: ${ha.pendingEntityId}")
+        appendLine("            name: Défauts en attente")
+        appendLine("          - entity: ${ha.readinessEntityId}")
+        appendLine("            name: Tests antipollution incomplets")
+        appendLine("      - type: markdown")
+        appendLine("        title: Détail des défauts")
+        // Literal block: one markdown list item per line
+        appendLine("        content: |")
+        appendLine("          {% set codes = state_attr('${ha.faultCountEntityId}', 'codes') or [] %}")
+        appendLine("          {% set pending = state_attr('${ha.pendingEntityId}', 'codes') or [] %}")
+        appendLine("          {% for c in codes %}")
+        appendLine("          - **{{ c.code }}** — {{ c.description }}")
+        appendLine("          {% endfor %}")
+        appendLine("          {% for c in pending %}")
+        appendLine("          - *{{ c.code }} (en attente)* — {{ c.description }}")
+        appendLine("          {% endfor %}")
+        appendLine("          {% if not codes and not pending %}Aucun défaut mémorisé ✅{% endif %}")
+        appendLine("          {% set clear = state_attr('${ha.faultCountEntityId}', 'dernier_effacement') %}")
+        appendLine("          {% if clear is mapping %}")
+        appendLine("")
+        appendLine("          _Dernier effacement : {{ clear.message }}_")
+        appendLine("          {% endif %}")
+        if (withClearButton) {
+            appendLine("      - type: button")
+            appendLine("        name: Effacer les défauts")
+            appendLine("        icon: mdi:broom")
+            appendLine("        show_state: false")
+            appendLine("        tap_action:")
+            appendLine("          action: perform-action")
+            appendLine("          perform_action: input_button.press")
+            appendLine("          target:")
+            appendLine("            entity_id: ${ha.clearButtonEntityId}")
+            appendLine("          confirmation:")
+            appendLine("            text: >-")
+            appendLine("              Effacer les codes défaut ? Mettez le contact (moteur arrêté). Les tests")
+            appendLine("              antipollution seront remis à zéro et le voyant se rallumera si le défaut persiste.")
+        }
+    }
 
     private fun q(value: String): String = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 }

@@ -48,17 +48,23 @@ private val WEBHOOK_ID_REGEX = Regex("^[A-Za-z0-9_-]{16,}$")
  * Throws [IllegalArgumentException] for non-HTTPS URLs or weak/malformed IDs.
  */
 fun buildWebhookUrl(haUrl: String, webhookId: String): URL {
+    val base = validateHaBaseUrl(haUrl)
+    val id = webhookId.trim()
+    require(WEBHOOK_ID_REGEX.matches(id)) {
+        "L'ID du webhook doit faire au moins 16 caractères parmi A-Z, a-z, 0-9, _ et -"
+    }
+    return URI("$base/api/webhook/$id").toURL()
+}
+
+/** Normalised HTTPS base URL of Home Assistant (no trailing slash). Throws [IllegalArgumentException]. */
+fun validateHaBaseUrl(haUrl: String): String {
     val base = haUrl.trim().trimEnd('/')
     require(base.isNotEmpty()) { "URL Home Assistant vide" }
     val uri = runCatching { URI(base) }.getOrElse { throw IllegalArgumentException("URL invalide") }
     require(uri.scheme.equals("https", ignoreCase = true)) { "L'URL doit commencer par https://" }
     require(!uri.host.isNullOrBlank()) { "URL sans nom d'hôte" }
     require(uri.rawQuery == null && uri.rawFragment == null) { "L'URL ne doit pas contenir ? ou #" }
-    val id = webhookId.trim()
-    require(WEBHOOK_ID_REGEX.matches(id)) {
-        "L'ID du webhook doit faire au moins 16 caractères parmi A-Z, a-z, 0-9, _ et -"
-    }
-    return URI("$base/api/webhook/$id").toURL()
+    return base
 }
 
 /** 32 random bytes, URL-safe Base64 without padding (43 chars). */
