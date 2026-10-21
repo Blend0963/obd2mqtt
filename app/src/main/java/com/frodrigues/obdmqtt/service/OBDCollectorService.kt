@@ -106,8 +106,14 @@ class OBDCollectorService : LifecycleService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         when (intent?.action) {
-            ACTION_START, null -> startCollection()
-            ACTION_STOP -> stopCollection()
+            ACTION_START, null -> {
+                stoppedByUser = false
+                startCollection()
+            }
+            ACTION_STOP -> {
+                stoppedByUser = true  // the auto-start safety net must not restart it until next boot
+                stopCollection()
+            }
         }
         return START_STICKY
     }
@@ -468,6 +474,8 @@ class OBDCollectorService : LifecycleService() {
         val obdProtocolLabel = MutableStateFlow("")
         /** Current step ("Recherche des PIDs (12/254)…"), also shown on the main screen. */
         val statusText = MutableStateFlow("")
+        /** Set when the user taps "Arrêter"; reset at process start (reboot) or on "Démarrer". */
+        @Volatile var stoppedByUser = false
         /** Last fault-code read; kept after disconnect so the UI shows the last known state. */
         val diagnostics = MutableStateFlow<DiagnosticReport?>(null)
         val clearResult = MutableStateFlow<ClearResult?>(null)

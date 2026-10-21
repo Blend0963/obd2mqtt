@@ -57,8 +57,8 @@ fun SettingsScreen(
 
     val btMac by settings.btDeviceMac.collectAsState(initial = "")
     val btName by settings.btDeviceName.collectAsState(initial = "")
-    val autoStart by settings.autoStart.collectAsState(initial = false)
-    val engineRunningOnly by settings.engineRunningOnly.collectAsState(initial = true)
+    val autoStart by settings.autoStart.collectAsState(initial = true)
+    val engineRunningOnly by settings.engineRunningOnly.collectAsState(initial = false)
     val publishMode by settings.publishMode.collectAsState(initial = PublishMode.WEBHOOK)
 
     // Local text field state — avoids cursor-jump bug from DataStore re-emission

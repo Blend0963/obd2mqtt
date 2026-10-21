@@ -41,7 +41,7 @@ data class AppConfig(
     val webhookIntervalSeconds: Int = AppSettings.DEFAULT_WEBHOOK_INTERVAL_SECONDS,
     val obdProtocol: ObdProtocol = ObdProtocol.AUTO,
     /** Only query the ECU when the alternator is charging, so a parked car is never woken up. */
-    val engineRunningOnly: Boolean = true,
+    val engineRunningOnly: Boolean = false,
     /** Optional HA long-lived token: lets the app read the "clear faults" button state from HA. */
     val haToken: String = "",
     val btTransport: BtTransport = BtTransport.AUTO
@@ -92,7 +92,8 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
             setOf(0x0C, 0x0D, 0x04, 0x11, 0x05, 0x0B, 0x10, PidRegistry.ADAPTER_VOLTAGE)
     }
 
-    val autoStart: Flow<Boolean> = dataStore.data.map { it[AUTO_START] ?: false }
+    /** On by default: the app is meant to run unattended in the car. */
+    val autoStart: Flow<Boolean> = dataStore.data.map { it[AUTO_START] ?: true }
 
     val fastPids: Flow<Set<Int>> = dataStore.data.map { prefs ->
         parsePidHexSet(prefs[FAST_PIDS] ?: return@map DEFAULT_FAST_PIDS)
@@ -135,7 +136,8 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
     val publishMode: Flow<PublishMode> = dataStore.data.map { prefs ->
         prefs[PUBLISH_MODE]?.let { runCatching { PublishMode.valueOf(it) }.getOrNull() } ?: PublishMode.WEBHOOK
     }
-    val engineRunningOnly: Flow<Boolean> = dataStore.data.map { it[ENGINE_RUNNING_ONLY] ?: true }
+    /** Off by default: car units power off with the ignition, so the car is never queried while parked. */
+    val engineRunningOnly: Flow<Boolean> = dataStore.data.map { it[ENGINE_RUNNING_ONLY] ?: false }
     val haToken: Flow<String> = dataStore.data.map { it[HA_TOKEN] ?: "" }
     val lastObdProtocol: Flow<ObdProtocol?> = dataStore.data.map { prefs ->
         prefs[LAST_OBD_PROTOCOL]?.let { runCatching { ObdProtocol.valueOf(it) }.getOrNull() }
