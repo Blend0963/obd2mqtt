@@ -67,6 +67,8 @@ class OBDCollectorService : LifecycleService() {
     private lateinit var settings: AppSettings
     private var wakeLock: PowerManager.WakeLock? = null
     private var collectorJob: Job? = null
+    /** When collection (re)started: right after the car unit boots the engine is often not started yet. */
+    private var collectionStartedAt = 0L
     /** Set once the ECU answered during the current attempt. */
     @Volatile private var ecuConnected = false
     private var lastClear: ClearResult? = null
@@ -122,6 +124,7 @@ class OBDCollectorService : LifecycleService() {
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "OBDCollector::polling")
             .also { it.acquire() }
         val oldJob = collectorJob
+        collectionStartedAt = System.currentTimeMillis()
         collectorJob = lifecycleScope.launch(Dispatchers.Default) {
             oldJob?.cancelAndJoin()
             collectWithRetry()
@@ -157,8 +160,11 @@ class OBDCollectorService : LifecycleService() {
             bypassEngineGate = if (engineOff && config.engineRunningOnly) {
                 status.value = ServiceStatus.WAITING_ENGINE
                 val volts = engineOffVoltage.value?.let { "%.1f V".format(java.util.Locale.FRANCE, it) } ?: "?"
-                updateNotification("Moteur arrêté ($volts) — en veille, vérification toutes les ${ENGINE_OFF_RECHECK_MS / 60_000} min")
-                waitForWakeup(config, ENGINE_OFF_RECHECK_MS)
+                // Just after boot the unit is on before the engine: check often for a while
+                val recheckMs = if (System.currentTimeMillis() - collectionStartedAt < STARTUP_WINDOW_MS)
+                    STARTUP_RECHECK_MS else ENGINE_OFF_RECHECK_MS
+                updateNotification("Moteur arrêté ($volts) — nouvelle vérification dans ${recheckMs / 1000} s")
+                waitForWakeup(config, recheckMs)
             } else {
                 status.value = ServiceStatus.RECONNECTING
                 val delay = backoffMs.getOrElse(attempt) { 60_000L }
@@ -473,6 +479,8 @@ class OBDCollectorService : LifecycleService() {
         /** Alternator charging ⇒ engine running. A rested battery sits at 12.2–12.8 V. */
         const val ENGINE_RUNNING_VOLTAGE = 13.3
         const val ENGINE_OFF_RECHECK_MS = 2 * 60_000L
+        const val STARTUP_RECHECK_MS = 20_000L
+        const val STARTUP_WINDOW_MS = 10 * 60_000L
         const val DIAG_INTERVAL_MS = 60_000L
         const val CLEAR_REQUEST_MAX_AGE_MS = 2 * 60_000L
         private const val HA_BUTTON_POLL_MS = 15_000L

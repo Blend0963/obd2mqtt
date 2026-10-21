@@ -92,7 +92,7 @@ Seuls les défauts du **calculateur moteur** sont accessibles en OBD2. ABS/ESP, 
 
 La prise OBD est alimentée en permanence. Avec **Lire seulement moteur tournant** (activé par défaut), l'application lit d'abord la tension batterie mesurée par l'adaptateur, ce qui ne réveille aucun calculateur :
 - **au-dessus de 13,3 V**, l'alternateur charge, donc le moteur tourne : l'application interroge la voiture ;
-- **en dessous**, elle ne l'interroge pas, affiche « Moteur arrêté » et revérifie toutes les 2 minutes, et aussitôt que l'écran se rallume ou que le Bluetooth revient (réveil de l'autoradio au démarrage).
+- **en dessous**, elle ne l'interroge pas, affiche « Moteur arrêté » et revérifie toutes les 20 secondes pendant les 10 minutes qui suivent le démarrage de l'appareil (l'autoradio s'allume avant le moteur), puis toutes les 2 minutes, et aussitôt que l'écran se rallume ou que le Bluetooth revient (réveil de l'autoradio au démarrage).
 
 Les calculateurs (dont le BSI) peuvent ainsi se mettre en veille normalement voiture garée. Pour une immobilisation de plusieurs semaines, débranchez quand même l'adaptateur.
 
