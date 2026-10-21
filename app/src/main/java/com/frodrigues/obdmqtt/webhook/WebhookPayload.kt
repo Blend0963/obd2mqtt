@@ -10,7 +10,7 @@ import com.frodrigues.obdmqtt.util.toPlainValue
  * simply superseded by the next one — no buffering needed.
  *
  * ```
- * {"available":true,"ts":1729500000000,"device":"Jaecoo 7","pids":{"0C":850,"0D":42}}
+ * {"available":true,"ts":1729500000000,"device":"Peugeot 407","pids":{"0C":850,"0D":42}}
  * ```
  */
 object WebhookPayload {

@@ -58,7 +58,20 @@ class PidParserTest {
     }
 
     @Test
-    fun `returns null for unknown pid`() {
-        assertNull(PidParser.parse(0xFF, "41 FF 00"))
+    fun `unknown pid is parsed as raw value`() {
+        assertEquals(0x1234.toDouble(), PidParser.parse(0xFF, "41 FF 12 34")!!, 0.0)
+    }
+
+    @Test
+    fun `parses adapter battery voltage from ATRV`() {
+        assertEquals(12.6, PidParser.parse(PidRegistry.ADAPTER_VOLTAGE, "12.6V")!!, 0.001)
+        assertEquals(14.1, PidParser.parse(PidRegistry.ADAPTER_VOLTAGE, " 14,1 V ")!!, 0.001)
+        assertNull(PidParser.parse(PidRegistry.ADAPTER_VOLTAGE, "?"))
+    }
+
+    @Test
+    fun `adapter voltage uses ATRV command`() {
+        assertEquals("ATRV", PidRegistry.command(PidRegistry.ADAPTER_VOLTAGE))
+        assertEquals("010C", PidRegistry.command(0x0C))
     }
 }

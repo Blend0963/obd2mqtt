@@ -20,6 +20,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val btStatus: StateFlow<ConnectionStatus> = OBDCollectorService.btStatus
     val serverStatus: StateFlow<ConnectionStatus> = OBDCollectorService.serverStatus
     val pidReadings: StateFlow<Map<Int, Double>> = OBDCollectorService.pidReadings
+    val obdProtocolLabel: StateFlow<String> = OBDCollectorService.obdProtocolLabel
 
     fun startService() {
         val intent = Intent(getApplication(), OBDCollectorService::class.java).apply {

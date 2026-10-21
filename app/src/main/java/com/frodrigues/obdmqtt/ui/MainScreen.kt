@@ -30,8 +30,9 @@ fun MainScreen(
     val lastUpdate by viewModel.lastUpdateTime.collectAsState()
     val btStatus by viewModel.btStatus.collectAsState()
     val serverStatus by viewModel.serverStatus.collectAsState()
-    val publishMode by viewModel.settings.publishMode.collectAsState(initial = PublishMode.MQTT)
+    val publishMode by viewModel.settings.publishMode.collectAsState(initial = PublishMode.WEBHOOK)
     val pidReadings by viewModel.pidReadings.collectAsState()
+    val obdProtocol by viewModel.obdProtocolLabel.collectAsState()
 
     val isRunning = serviceStatus == ServiceStatus.CONNECTED ||
                     serviceStatus == ServiceStatus.CONNECTING ||
@@ -56,7 +57,7 @@ fun MainScreen(
             CenterAlignedTopAppBar(
                 title = {
                     Text(
-                        text = "OBD2 Bridge",
+                        text = "OBD2 → Home Assistant",
                         style = MaterialTheme.typography.titleLarge
                     )
                 },
@@ -64,7 +65,7 @@ fun MainScreen(
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(
                             imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings",
+                            contentDescription = "Réglages",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -98,7 +99,7 @@ fun MainScreen(
                         modifier = Modifier.weight(1f)
                     )
                     ConnectionCard(
-                        label = if (publishMode == PublishMode.WEBHOOK) "HA Webhook" else "MQTT Broker",
+                        label = if (publishMode == PublishMode.WEBHOOK) "Home Assistant" else "Broker MQTT",
                         status = serverStatus,
                         modifier = Modifier.weight(1f)
                     )
@@ -118,7 +119,7 @@ fun MainScreen(
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
-                                text = "Active PIDs",
+                                text = "PIDs actifs",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -129,9 +130,17 @@ fun MainScreen(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
+                        if (obdProtocol.isNotBlank()) {
+                            Text(
+                                text = obdProtocol,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f).padding(horizontal = 12.dp)
+                            )
+                        }
                         if (lastUpdate > 0L) {
                             Text(
-                                text = "Updated ${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(lastUpdate))}",
+                                text = "Mis à jour à ${SimpleDateFormat("HH:mm:ss", Locale.FRANCE).format(Date(lastUpdate))}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -142,7 +151,7 @@ fun MainScreen(
                 // ── PID readings list ─────────────────────────────────────────
                 if (sortedPidEntries.isNotEmpty()) {
                     Text(
-                        text = "Readings",
+                        text = "Mesures en direct",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(horizontal = 4.dp)
@@ -207,7 +216,7 @@ fun MainScreen(
                         ButtonDefaults.buttonColors()
                 ) {
                     Text(
-                        text = if (isRunning) "Stop" else "Start",
+                        text = if (isRunning) "Arrêter" else "Démarrer",
                         style = MaterialTheme.typography.labelLarge
                     )
                 }
@@ -257,9 +266,9 @@ private fun ConnectionCard(
 
 @Composable
 private fun connectionLabel(status: ConnectionStatus): String = when (status) {
-    ConnectionStatus.DISCONNECTED -> "Offline"
-    ConnectionStatus.CONNECTING -> "Connecting"
-    ConnectionStatus.CONNECTED -> "Online"
+    ConnectionStatus.DISCONNECTED -> "Hors ligne"
+    ConnectionStatus.CONNECTING -> "Connexion…"
+    ConnectionStatus.CONNECTED -> "En ligne"
 }
 
 @Composable
@@ -273,7 +282,7 @@ private fun formatValue(value: Double, unit: String): String {
     val formatted = if (value == value.toLong().toDouble()) {
         value.toLong().toString()
     } else {
-        "%.2f".format(value).trimEnd('0').trimEnd('.')
+        "%.2f".format(Locale.FRANCE, value).trimEnd('0').trimEnd(',')
     }
     return if (unit.isBlank()) formatted else "$formatted $unit"
 }

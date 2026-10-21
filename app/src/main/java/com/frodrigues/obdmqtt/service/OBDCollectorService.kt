@@ -14,6 +14,7 @@ import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.frodrigues.obdmqtt.MainActivity
 import com.frodrigues.obdmqtt.bluetooth.BluetoothTransportFactory
+import com.frodrigues.obdmqtt.obd.Mode22Registry
 import com.frodrigues.obdmqtt.obd.Mode22Scanner
 import com.frodrigues.obdmqtt.obd.ObdCommandExecutor
 import com.frodrigues.obdmqtt.obd.PidPoller
@@ -49,6 +50,7 @@ class OBDCollectorService : LifecycleService() {
         btStatus.value = ConnectionStatus.DISCONNECTED
         serverStatus.value = ConnectionStatus.DISCONNECTED
         pidReadings.value = emptyMap()
+        obdProtocolLabel.value = ""
         settings = AppSettings(applicationContext.dataStore)
         createNotificationChannel()
     }
@@ -70,7 +72,7 @@ class OBDCollectorService : LifecycleService() {
     private fun startCollection() {
         startForeground(
             NOTIFICATION_ID,
-            buildNotification("Starting..."),
+            buildNotification("Démarrage…"),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
         )
         wakeLock = (getSystemService(POWER_SERVICE) as PowerManager)
@@ -98,7 +100,7 @@ class OBDCollectorService : LifecycleService() {
                 serverStatus.value = ConnectionStatus.DISCONNECTED
                 val delay = backoffMs.getOrElse(attempt) { 60_000L }
                 attempt = minOf(attempt + 1, backoffMs.lastIndex)
-                updateNotification("Reconnecting in ${delay / 1000}s...")
+                updateNotification("Nouvelle tentative dans ${delay / 1000} s… (${e.message?.take(60)})")
                 delay(delay)
             }
         }
@@ -106,19 +108,19 @@ class OBDCollectorService : LifecycleService() {
 
     private suspend fun collect() {
         val config = settings.snapshot()
-        if (config.btDeviceMac.isBlank()) throw IllegalStateException("No BT device configured")
+        if (config.btDeviceMac.isBlank()) throw IllegalStateException("Aucun adaptateur Bluetooth configuré")
         when (config.publishMode) {
             PublishMode.MQTT ->
-                if (config.mqttHost.isBlank()) throw IllegalStateException("No MQTT host configured")
+                if (config.mqttHost.isBlank()) throw IllegalStateException("Aucun serveur MQTT configuré")
             PublishMode.WEBHOOK -> buildWebhookUrl(config.haUrl, config.webhookId)  // throws if invalid
         }
 
         status.value = ServiceStatus.CONNECTING
         btStatus.value = ConnectionStatus.CONNECTING
-        updateNotification("Connecting to Bluetooth...")
+        updateNotification("Connexion Bluetooth…")
 
         val bluetoothAdapter = getSystemService(BluetoothManager::class.java)?.adapter
-            ?: throw IllegalStateException("Bluetooth not available")
+            ?: throw IllegalStateException("Bluetooth indisponible")
 
         val device = bluetoothAdapter.getRemoteDevice(config.btDeviceMac)
         val transport = BluetoothTransportFactory.create(device, applicationContext)
@@ -126,44 +128,48 @@ class OBDCollectorService : LifecycleService() {
 
         val sink = TelemetrySink.create(config) { serverStatus.value = it }
         try {
-            updateNotification("Initializing ELM327...")
-            val executor = ObdCommandExecutor(transport)
+            updateNotification("Initialisation ELM327 et recherche du protocole…")
+            val executor = ObdCommandExecutor(transport, config.obdProtocol)
             executor.initialize()
+            obdProtocolLabel.value = executor.detectedProtocol?.label ?: ""
 
-            updateNotification("Scanning PIDs...")
+            updateNotification("Recherche des PIDs…")
             val supportedPids = PidScanner(
                 executor = executor,
                 settings = settings,
                 onProgress = { scanned, total ->
-                    updateNotification("Scanning PIDs ($scanned/$total)...")
+                    updateNotification("Recherche des PIDs ($scanned/$total)…")
                 }
             ).scan()
             activePidCount.value = supportedPids.size
             btStatus.value = ConnectionStatus.CONNECTED
 
-            updateNotification("Scanning Mode 22 PIDs...")
-            val mode22Pids = Mode22Scanner(
-                executor = executor,
-                settings = settings,
-                onProgress = { scanned, total ->
-                    updateNotification("Scanning Mode 22 ($scanned/$total)...")
-                }
-            ).scan()
+            // Mode 22 is manufacturer-specific and nothing is decoded yet: skip the
+            // 256-request scan (several minutes on a KWP2000 ECU) until definitions exist
+            val mode22Pids = if (Mode22Registry.definitions.isEmpty()) emptyMap() else {
+                updateNotification("Recherche des PIDs Mode 22…")
+                Mode22Scanner(
+                    executor = executor,
+                    settings = settings,
+                    onProgress = { scanned, total ->
+                        updateNotification("Recherche Mode 22 ($scanned/$total)…")
+                    }
+                ).scan()
+            }
 
             val mac = device.address.replace(":", "")
             coroutineScope {
                 updateNotification(
-                    if (config.publishMode == PublishMode.WEBHOOK) "Starting webhook..." else "Connecting to MQTT..."
+                    if (config.publishMode == PublishMode.WEBHOOK) "Démarrage du webhook…" else "Connexion MQTT…"
                 )
                 sink.start(this, mac, supportedPids, mode22Pids.keys)
 
                 status.value = ServiceStatus.CONNECTED
-                updateNotification("Connected — ${supportedPids.size} M01 + ${mode22Pids.size} M22 PIDs")
 
                 val activeFast = supportedPids.intersect(settings.fastPids.first())
                 val activeSlow = supportedPids.intersect(settings.slowPids.first())
 
-                updateNotification("Connected — ${activeFast.size} fast (${PidPoller.FAST_INTERVAL_SECONDS}s) + ${activeSlow.size} slow (${PidPoller.SLOW_INTERVAL_SECONDS}s)")
+                updateNotification("Connecté — ${activeFast.size} rapides (${PidPoller.FAST_INTERVAL_SECONDS} s) + ${activeSlow.size} lents (${PidPoller.SLOW_INTERVAL_SECONDS} s)")
 
                 val currentReadings = mutableMapOf<Int, Double>()
 
@@ -184,6 +190,7 @@ class OBDCollectorService : LifecycleService() {
             btStatus.value = ConnectionStatus.DISCONNECTED
             serverStatus.value = ConnectionStatus.DISCONNECTED
             pidReadings.value = emptyMap()
+            obdProtocolLabel.value = ""
         }
     }
 
@@ -215,7 +222,7 @@ class OBDCollectorService : LifecycleService() {
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "OBD2 Collector",
+            "Collecte OBD2",
             NotificationManager.IMPORTANCE_LOW
         )
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
@@ -223,7 +230,7 @@ class OBDCollectorService : LifecycleService() {
 
     private fun buildNotification(text: String) =
         NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("OBD2 Bridge")
+            .setContentTitle("OBD2 → Home Assistant")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
@@ -253,5 +260,7 @@ class OBDCollectorService : LifecycleService() {
         val btStatus = MutableStateFlow(ConnectionStatus.DISCONNECTED)
         val serverStatus = MutableStateFlow(ConnectionStatus.DISCONNECTED)
         val pidReadings = MutableStateFlow<Map<Int, Double>>(emptyMap())
+        /** OBD protocol detected by the ELM327, e.g. "ISO 15765-4 CAN 11 bits 500 kbit/s". */
+        val obdProtocolLabel = MutableStateFlow("")
     }
 }

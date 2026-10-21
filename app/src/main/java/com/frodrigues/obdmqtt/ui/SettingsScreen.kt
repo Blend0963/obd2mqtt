@@ -30,10 +30,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.frodrigues.obdmqtt.mqtt.testMqttConnection
+import com.frodrigues.obdmqtt.obd.ObdProtocol
 import com.frodrigues.obdmqtt.settings.AppConfig
 import com.frodrigues.obdmqtt.settings.AppSettings
 import com.frodrigues.obdmqtt.settings.PublishMode
 import com.frodrigues.obdmqtt.settings.syncAutoStartToDeStorage
+import com.frodrigues.obdmqtt.webhook.HaDashboardYaml
 import com.frodrigues.obdmqtt.webhook.HaWebhookYaml
 import com.frodrigues.obdmqtt.webhook.buildWebhookUrl
 import com.frodrigues.obdmqtt.webhook.generateWebhookId
@@ -53,7 +55,7 @@ fun SettingsScreen(
 
     val btMac by settings.btDeviceMac.collectAsState(initial = "")
     val autoStart by settings.autoStart.collectAsState(initial = false)
-    val publishMode by settings.publishMode.collectAsState(initial = PublishMode.MQTT)
+    val publishMode by settings.publishMode.collectAsState(initial = PublishMode.WEBHOOK)
 
     // Local text field state — avoids cursor-jump bug from DataStore re-emission
     var localHost by rememberSaveable { mutableStateOf("") }
@@ -82,7 +84,10 @@ fun SettingsScreen(
             localDeviceModel = snap.deviceModel
             localDeviceManufacturer = snap.deviceManufacturer
             localHaUrl = snap.haUrl
-            localWebhookId = snap.webhookId
+            localWebhookId = snap.webhookId.ifBlank {
+                // Webhook is the default mode: give a fresh install its secret right away
+                generateWebhookId().also { id -> settings.update { this[AppSettings.WEBHOOK_ID] = id } }
+            }
             localWebhookInterval = snap.webhookIntervalSeconds.toString()
             fieldsInitialized = true
         }
@@ -138,6 +143,42 @@ fun SettingsScreen(
     val cachedPids by settings.cachedPids.collectAsState(initial = emptySet())
     val selectedFastPids by settings.fastPids.collectAsState(initial = emptySet())
     val selectedSlowPids by settings.slowPids.collectAsState(initial = emptySet())
+    fun polledPids(): Set<Int> {
+        val polled = selectedFastPids + selectedSlowPids
+        return if (cachedPids.isEmpty()) polled else polled.intersect(cachedPids)
+    }
+
+    val obdProtocol by settings.obdProtocol.collectAsState(initial = ObdProtocol.AUTO)
+    var showProtocolDialog by remember { mutableStateOf(false) }
+
+    if (showProtocolDialog) {
+        AlertDialog(
+            onDismissRequest = { showProtocolDialog = false },
+            title = { Text("Protocole OBD") },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        "Laissez « Automatique » : selon la motorisation, la 407 utilise le CAN ou le KWP2000.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    ObdProtocol.entries.forEach { protocol ->
+                        ListItem(
+                            headlineContent = { Text(protocol.label) },
+                            leadingContent = { RadioButton(selected = protocol == obdProtocol, onClick = null) },
+                            modifier = Modifier.clickable(role = Role.RadioButton) {
+                                scope.launch { settings.update { this[AppSettings.OBD_PROTOCOL] = protocol.name } }
+                                showProtocolDialog = false
+                            }
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showProtocolDialog = false }) { Text("Fermer") }
+            }
+        )
+    }
 
     // BT device dialog
     if (showDeviceDialog) {
@@ -149,11 +190,11 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Bluetooth Device")
+                    Text("Adaptateur Bluetooth")
                     IconButton(onClick = { refreshDevices() }) {
                         Icon(
                             Icons.Default.Refresh,
-                            contentDescription = "Refresh",
+                            contentDescription = "Actualiser",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -167,7 +208,7 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            "No paired devices found.",
+                            "Aucun appareil appairé. Appairez le Vgate iCar Pro (code 1234) dans les réglages Bluetooth.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -175,7 +216,7 @@ fun SettingsScreen(
                             context.startActivity(Intent(AndroidSettings.ACTION_BLUETOOTH_SETTINGS))
                             showDeviceDialog = false
                         }) {
-                            Text("Open Bluetooth Settings")
+                            Text("Ouvrir les réglages Bluetooth")
                         }
                     }
                 } else {
@@ -205,7 +246,7 @@ fun SettingsScreen(
                                 },
                                 modifier = Modifier.clickable(
                                     role = Role.RadioButton,
-                                    onClickLabel = "Select $name"
+                                    onClickLabel = "Sélectionner $name"
                                 ) {
                                     scope.launch {
                                         settings.update {
@@ -220,7 +261,7 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showDeviceDialog = false }) { Text("Done") }
+                TextButton(onClick = { showDeviceDialog = false }) { Text("Fermer") }
             }
         )
     }
@@ -228,12 +269,12 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text("Réglages") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = "Retour"
                         )
                     }
                 },
@@ -251,7 +292,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(4.dp))
 
             // ── Bluetooth ─────────────────────────────────────────────────────
-            SettingsSection(header = { SectionLabel("Bluetooth Device") }) {
+            SettingsSection(header = { SectionLabel("Adaptateur OBD2 (Bluetooth)") }) {
                 Column(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -265,7 +306,7 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = selectedName ?: "Tap to select a device…",
+                            text = selectedName ?: "Choisir l'adaptateur…",
                             modifier = Modifier.weight(1f),
                             color = if (selectedName != null)
                                 MaterialTheme.colorScheme.onSurface
@@ -286,12 +327,12 @@ fun SettingsScreen(
             }
 
             // ── Publish mode ──────────────────────────────────────────────────
-            SettingsSection(header = { SectionLabel("Home Assistant Connection") }) {
+            SettingsSection(header = { SectionLabel("Connexion à Home Assistant") }) {
                 Column(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val modes = listOf(PublishMode.MQTT to "MQTT (LAN)", PublishMode.WEBHOOK to "Webhook HTTPS")
+                    val modes = listOf(PublishMode.WEBHOOK to "Webhook HTTPS", PublishMode.MQTT to "MQTT (local)")
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                         modes.forEachIndexed { index, (mode, label) ->
                             SegmentedButton(
@@ -308,9 +349,9 @@ fun SettingsScreen(
                     }
                     Text(
                         text = if (publishMode == PublishMode.WEBHOOK)
-                            "Readings are POSTed over HTTPS to a Home Assistant webhook — suited to access over the internet."
+                            "Les mesures sont envoyées en direct en HTTPS vers un webhook Home Assistant — adapté à un accès par Internet (4G)."
                         else
-                            "Readings are published to an MQTT broker with HA auto-discovery — best on the local network.",
+                            "Les mesures sont publiées sur un broker MQTT avec découverte automatique — pour le réseau local.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -318,7 +359,7 @@ fun SettingsScreen(
             }
 
             // ── Webhook ───────────────────────────────────────────────────────
-            if (publishMode == PublishMode.WEBHOOK) SettingsSection(header = { SectionLabel("Webhook (HTTPS)") }) {
+            if (publishMode == PublishMode.WEBHOOK) SettingsSection(header = { SectionLabel("Webhook HTTPS") }) {
                 Column(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -332,9 +373,9 @@ fun SettingsScreen(
                         onValueChange = { localHaUrl = it
                             scope.launch { settings.update { this[AppSettings.HA_URL] = it.trim() } }
                         },
-                        label = { Text("Home Assistant URL") },
-                        placeholder = { Text("https://ha.example.com") },
-                        supportingText = { Text(urlError ?: "External HTTPS URL (valid certificate required)") },
+                        label = { Text("URL de Home Assistant") },
+                        placeholder = { Text("https://maison.exemple.fr") },
+                        supportingText = { Text(urlError ?: "URL externe en HTTPS (certificat valide requis)") },
                         isError = urlError != null,
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
@@ -343,21 +384,21 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = localWebhookId,
                         onValueChange = { saveWebhookId(it.trim()) },
-                        label = { Text("Webhook ID (secret)") },
-                        supportingText = { Text("Random 256-bit ID — acts as the password") },
+                        label = { Text("ID du webhook (secret)") },
+                        supportingText = { Text("Identifiant aléatoire de 256 bits — sert de mot de passe") },
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth()
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { saveWebhookId(generateWebhookId()) }) {
-                            Text("New ID")
+                            Text("Nouvel ID")
                         }
                         OutlinedButton(
-                            onClick = { copyToClipboard(context, "Webhook ID", localWebhookId) },
+                            onClick = { copyToClipboard(context, "ID du webhook", localWebhookId) },
                             enabled = localWebhookId.isNotBlank()
                         ) {
-                            Text("Copy ID")
+                            Text("Copier l'ID")
                         }
                     }
                     OutlinedTextField(
@@ -368,8 +409,8 @@ fun SettingsScreen(
                                 scope.launch { settings.update { this[AppSettings.WEBHOOK_INTERVAL] = seconds } }
                             }
                         },
-                        label = { Text("Send interval (s)") },
-                        supportingText = { Text("Latest values are sent at most this often (default: 5)") },
+                        label = { Text("Intervalle d'envoi (s)") },
+                        supportingText = { Text("Les dernières valeurs sont envoyées à ce rythme (1 = temps réel)") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth()
@@ -397,23 +438,23 @@ fun SettingsScreen(
                                     strokeWidth = 2.dp
                                 )
                                 Spacer(Modifier.width(8.dp))
-                                Text("Testing…")
+                                Text("Test en cours…")
                             } else {
-                                Text("Test Connection")
+                                Text("Tester la connexion")
                             }
                         }
 
                         webhookTestResult?.let { result ->
                             if (result.isSuccess) {
                                 Text(
-                                    text = "✓ Reachable",
+                                    text = "✓ Serveur joignable",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.primary
                                 )
                             } else {
                                 Text(
-                                    text = "✗ Failed: ${result.exceptionOrNull()?.message?.take(40)}",
+                                    text = "✗ Échec : ${result.exceptionOrNull()?.message?.take(60)}",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.error
                                 )
@@ -423,22 +464,31 @@ fun SettingsScreen(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Text(
-                        text = "Home Assistant needs a matching configuration. Copy the generated YAML " +
-                               "into configuration.yaml, then reload template entities. Regenerate it " +
-                               "after changing the PID selection or the webhook ID.",
+                        text = "1. Copiez la configuration et collez-la dans configuration.yaml, puis rechargez " +
+                               "les entités de modèle. 2. Copiez le tableau de bord et collez-le dans l'éditeur " +
+                               "de configuration brute d'un nouveau tableau de bord. À refaire après un " +
+                               "changement de PIDs ou d'ID.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     OutlinedButton(
                         onClick = {
-                            val polled = selectedFastPids + selectedSlowPids
-                            val pids = if (cachedPids.isEmpty()) polled else polled.intersect(cachedPids)
-                            copyToClipboard(context, "HA YAML", HaWebhookYaml.generate(currentConfig(), pids))
+                            val pids = polledPids()
+                            copyToClipboard(context, "Configuration HA", HaWebhookYaml.generate(currentConfig(), pids))
                         },
                         enabled = localWebhookId.isNotBlank(),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Copy Home Assistant YAML")
+                        Text("1. Copier la configuration Home Assistant")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            copyToClipboard(context, "Tableau de bord", HaDashboardYaml.generate(currentConfig(), polledPids()))
+                        },
+                        enabled = polledPids().isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("2. Copier le tableau de bord")
                     }
                 }
             }
@@ -458,8 +508,8 @@ fun SettingsScreen(
                             onValueChange = { localHost = it
                                 scope.launch { settings.update { this[AppSettings.MQTT_HOST] = it } }
                             },
-                            label = { Text("Host") },
-                            supportingText = { Text("IP or hostname") },
+                            label = { Text("Serveur") },
+                            supportingText = { Text("IP ou nom d'hôte") },
                             singleLine = true,
                             modifier = Modifier.weight(2f)
                         )
@@ -472,7 +522,7 @@ fun SettingsScreen(
                                 }
                             },
                             label = { Text("Port") },
-                            supportingText = { Text("Default: 1883") },
+                            supportingText = { Text("Par défaut : 1883") },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f)
@@ -480,7 +530,7 @@ fun SettingsScreen(
                     }
 
                     Text(
-                        text = "Credentials (optional)",
+                        text = "Identifiants (facultatif)",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -489,7 +539,7 @@ fun SettingsScreen(
                         onValueChange = { localUser = it
                             scope.launch { settings.update { this[AppSettings.MQTT_USER] = it } }
                         },
-                        label = { Text("Username") },
+                        label = { Text("Utilisateur") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -498,7 +548,7 @@ fun SettingsScreen(
                         onValueChange = { localPassword = it
                             scope.launch { settings.update { this[AppSettings.MQTT_PASSWORD] = it } }
                         },
-                        label = { Text("Password") },
+                        label = { Text("Mot de passe") },
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth()
@@ -527,23 +577,23 @@ fun SettingsScreen(
                                     strokeWidth = 2.dp
                                 )
                                 Spacer(Modifier.width(8.dp))
-                                Text("Testing…")
+                                Text("Test en cours…")
                             } else {
-                                Text("Test Connection")
+                                Text("Tester la connexion")
                             }
                         }
 
                         mqttTestResult?.let { result ->
                             if (result.isSuccess) {
                                 Text(
-                                    text = "✓ Connected",
+                                    text = "✓ Connecté",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.primary
                                 )
                             } else {
                                 Text(
-                                    text = "✗ Failed: ${result.exceptionOrNull()?.message?.take(40)}",
+                                    text = "✗ Échec : ${result.exceptionOrNull()?.message?.take(60)}",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.error
                                 )
@@ -554,13 +604,13 @@ fun SettingsScreen(
             }
 
             // ── Device Info ───────────────────────────────────────────────────
-            SettingsSection(header = { SectionLabel("Device (Home Assistant)") }) {
+            SettingsSection(header = { SectionLabel("Véhicule (Home Assistant)") }) {
                 Column(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "These values appear in HA entity names and device info.",
+                        text = "Ces valeurs apparaissent dans le nom des capteurs Home Assistant.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -573,7 +623,7 @@ fun SettingsScreen(
                             onValueChange = { localDeviceName = it
                                 scope.launch { settings.update { this[AppSettings.DEVICE_NAME] = it } }
                             },
-                            label = { Text("Name") },
+                            label = { Text("Nom") },
                             singleLine = true,
                             modifier = Modifier.weight(1f)
                         )
@@ -582,7 +632,7 @@ fun SettingsScreen(
                             onValueChange = { localDeviceModel = it
                                 scope.launch { settings.update { this[AppSettings.DEVICE_MODEL] = it } }
                             },
-                            label = { Text("Model") },
+                            label = { Text("Modèle") },
                             singleLine = true,
                             modifier = Modifier.weight(1f)
                         )
@@ -592,7 +642,7 @@ fun SettingsScreen(
                         onValueChange = { localDeviceManufacturer = it
                             scope.launch { settings.update { this[AppSettings.DEVICE_MANUFACTURER] = it } }
                         },
-                        label = { Text("Manufacturer") },
+                        label = { Text("Marque") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -601,7 +651,7 @@ fun SettingsScreen(
 
             // ── Comportamento ─────────────────────────────────────────────────
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            SectionLabel("Comportamento")
+            SectionLabel("Fonctionnement")
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -611,10 +661,10 @@ fun SettingsScreen(
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 ListItem(
-                    headlineContent = { Text("Iniciar automaticamente") },
+                    headlineContent = { Text("Démarrage automatique") },
                     supportingContent = {
                         Text(
-                            text = "Inicia o serviço ao ligar o dispositivo e mantém ativo em segundo plano.",
+                            text = "Lance la collecte au démarrage du téléphone et la garde active en arrière-plan.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -635,7 +685,7 @@ fun SettingsScreen(
                     ),
                     modifier = Modifier.clickable(
                         role = Role.Switch,
-                        onClickLabel = "Iniciar automaticamente"
+                        onClickLabel = "Démarrage automatique"
                     ) {
                         scope.launch {
                             val newValue = !autoStart
@@ -662,11 +712,11 @@ fun SettingsScreen(
                 val totalCount = cachedPids.size
 
                 ListItem(
-                    headlineContent = { Text("PID Selection") },
+                    headlineContent = { Text("Sélection des PIDs") },
                     supportingContent = {
                         Text(
-                            text = if (totalCount == 0) "No PIDs discovered yet"
-                                   else "${fastPids.size} rápidos · ${slowPids.size} lentos · $totalCount descobertos",
+                            text = if (totalCount == 0) "Aucun PID détecté pour l'instant"
+                                   else "${fastPids.size} rapides · ${slowPids.size} lents · $totalCount détectés",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -691,7 +741,7 @@ fun SettingsScreen(
 
             // ── PID Cache ─────────────────────────────────────────────────────
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            SectionLabel("OBD2 Scanner")
+            SectionLabel("Scanner OBD2")
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -704,9 +754,16 @@ fun SettingsScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    OutlinedButton(
+                        onClick = { showProtocolDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Protocole : ${obdProtocol.label}", modifier = Modifier.weight(1f))
+                        Text("▾", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     Text(
-                        text = "Discovered PIDs are cached to avoid rescanning on every start. " +
-                               "Clear cache and restart the service to probe all PIDs again.",
+                        text = "Les PIDs détectés sont mémorisés pour éviter une recherche à chaque démarrage. " +
+                               "Videz le cache et relancez la collecte pour tout redétecter.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -714,13 +771,13 @@ fun SettingsScreen(
                         onClick = { scope.launch { settings.clearPidCache() } },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Clear Mode 01 Cache")
+                        Text("Vider le cache Mode 01")
                     }
                     OutlinedButton(
                         onClick = { scope.launch { settings.clearMode22Cache() } },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Clear Mode 22 Cache")
+                        Text("Vider le cache Mode 22")
                     }
                 }
             }

@@ -34,7 +34,7 @@ class WebhookPublisher(val url: URL, private val timeoutMs: Int = 10_000) {
             conn.outputStream.use { it.write(body) }
             val code = conn.responseCode
             runCatching { conn.inputStream.use { it.readBytes() } }  // drain for keep-alive
-            if (code !in 200..299) throw IOException("HTTP $code")
+            if (code !in 200..299) throw IOException("Réponse HTTP $code")
         } finally {
             conn.disconnect()
         }
@@ -49,14 +49,14 @@ private val WEBHOOK_ID_REGEX = Regex("^[A-Za-z0-9_-]{16,}$")
  */
 fun buildWebhookUrl(haUrl: String, webhookId: String): URL {
     val base = haUrl.trim().trimEnd('/')
-    require(base.isNotEmpty()) { "Home Assistant URL is empty" }
-    val uri = runCatching { URI(base) }.getOrElse { throw IllegalArgumentException("Invalid URL") }
-    require(uri.scheme.equals("https", ignoreCase = true)) { "URL must start with https://" }
-    require(!uri.host.isNullOrBlank()) { "URL has no host" }
-    require(uri.rawQuery == null && uri.rawFragment == null) { "URL must not contain ? or #" }
+    require(base.isNotEmpty()) { "URL Home Assistant vide" }
+    val uri = runCatching { URI(base) }.getOrElse { throw IllegalArgumentException("URL invalide") }
+    require(uri.scheme.equals("https", ignoreCase = true)) { "L'URL doit commencer par https://" }
+    require(!uri.host.isNullOrBlank()) { "URL sans nom d'hôte" }
+    require(uri.rawQuery == null && uri.rawFragment == null) { "L'URL ne doit pas contenir ? ou #" }
     val id = webhookId.trim()
     require(WEBHOOK_ID_REGEX.matches(id)) {
-        "Webhook ID must be at least 16 chars of A-Z, a-z, 0-9, _ or -"
+        "L'ID du webhook doit faire au moins 16 caractères parmi A-Z, a-z, 0-9, _ et -"
     }
     return URI("$base/api/webhook/$id").toURL()
 }

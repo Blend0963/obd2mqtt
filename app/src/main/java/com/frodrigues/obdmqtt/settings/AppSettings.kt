@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
+import com.frodrigues.obdmqtt.obd.ObdProtocol
+import com.frodrigues.obdmqtt.obd.PidRegistry
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -30,10 +32,11 @@ data class AppConfig(
     val deviceName: String,
     val deviceModel: String,
     val deviceManufacturer: String,
-    val publishMode: PublishMode = PublishMode.MQTT,
+    val publishMode: PublishMode = PublishMode.WEBHOOK,
     val haUrl: String = "",
     val webhookId: String = "",
-    val webhookIntervalSeconds: Int = AppSettings.DEFAULT_WEBHOOK_INTERVAL_SECONDS
+    val webhookIntervalSeconds: Int = AppSettings.DEFAULT_WEBHOOK_INTERVAL_SECONDS,
+    val obdProtocol: ObdProtocol = ObdProtocol.AUTO
 ) {
     val mqttClientId: String get() = "obd2_android_${btDeviceMac.replace(":", "")}"
 }
@@ -66,11 +69,13 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
         val WEBHOOK_ID = stringPreferencesKey("webhookId")
         val WEBHOOK_INTERVAL = intPreferencesKey("webhookIntervalSeconds")
 
-        const val DEFAULT_WEBHOOK_INTERVAL_SECONDS = 5
+        const val DEFAULT_WEBHOOK_INTERVAL_SECONDS = 1
+        val OBD_PROTOCOL = stringPreferencesKey("obdProtocol")
 
-        // Default PID sets — applied on first launch and after update from old binary model
-        val DEFAULT_FAST_PIDS: Set<Int> = setOf(0x0C, 0x0D, 0x42, 0x5E) // RPM, Speed, Voltage, Fuel Rate
-        val DEFAULT_SLOW_PIDS: Set<Int> = setOf(0x2F, 0xA6)              // Fuel Level, Odometer
+        // Default fast PIDs (1 s) — live driving data; only those the car supports are polled.
+        // RPM, Speed, Load, Throttle, Coolant, MAP, MAF, battery voltage (AT RV)
+        val DEFAULT_FAST_PIDS: Set<Int> =
+            setOf(0x0C, 0x0D, 0x04, 0x11, 0x05, 0x0B, 0x10, PidRegistry.ADAPTER_VOLTAGE)
     }
 
     val autoStart: Flow<Boolean> = dataStore.data.map { it[AUTO_START] ?: false }
@@ -79,8 +84,10 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
         parsePidHexSet(prefs[FAST_PIDS] ?: return@map DEFAULT_FAST_PIDS)
     }
 
+    /** Until the user edits the selection, every other discovered PID is polled slowly ("all data"). */
     val slowPids: Flow<Set<Int>> = dataStore.data.map { prefs ->
-        parsePidHexSet(prefs[SLOW_PIDS] ?: return@map DEFAULT_SLOW_PIDS)
+        prefs[SLOW_PIDS]?.let { parsePidHexSet(it) }
+            ?: (parsePidHexSet(prefs[CACHED_PIDS] ?: "") - (prefs[FAST_PIDS]?.let { parsePidHexSet(it) } ?: DEFAULT_FAST_PIDS))
     }
 
     suspend fun savePidModes(fast: Set<Int>, slow: Set<Int>) {
@@ -95,11 +102,14 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
     val mqttPort: Flow<Int> = dataStore.data.map { it[MQTT_PORT] ?: 1883 }
     val mqttUser: Flow<String> = dataStore.data.map { it[MQTT_USER] ?: "" }
     val mqttPassword: Flow<String> = dataStore.data.map { it[MQTT_PASSWORD] ?: "" }
-    val deviceName: Flow<String> = dataStore.data.map { it[DEVICE_NAME] ?: "Jaecoo 7" }
-    val deviceModel: Flow<String> = dataStore.data.map { it[DEVICE_MODEL] ?: "Jaecoo 7" }
-    val deviceManufacturer: Flow<String> = dataStore.data.map { it[DEVICE_MANUFACTURER] ?: "Jaecoo" }
+    val deviceName: Flow<String> = dataStore.data.map { it[DEVICE_NAME] ?: "Peugeot 407" }
+    val deviceModel: Flow<String> = dataStore.data.map { it[DEVICE_MODEL] ?: "407" }
+    val deviceManufacturer: Flow<String> = dataStore.data.map { it[DEVICE_MANUFACTURER] ?: "Peugeot" }
     val publishMode: Flow<PublishMode> = dataStore.data.map { prefs ->
-        prefs[PUBLISH_MODE]?.let { runCatching { PublishMode.valueOf(it) }.getOrNull() } ?: PublishMode.MQTT
+        prefs[PUBLISH_MODE]?.let { runCatching { PublishMode.valueOf(it) }.getOrNull() } ?: PublishMode.WEBHOOK
+    }
+    val obdProtocol: Flow<ObdProtocol> = dataStore.data.map { prefs ->
+        prefs[OBD_PROTOCOL]?.let { runCatching { ObdProtocol.valueOf(it) }.getOrNull() } ?: ObdProtocol.AUTO
     }
     val haUrl: Flow<String> = dataStore.data.map { it[HA_URL] ?: "" }
     val webhookId: Flow<String> = dataStore.data.map { it[WEBHOOK_ID] ?: "" }
@@ -119,7 +129,8 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
         publishMode = publishMode.first(),
         haUrl = haUrl.first(),
         webhookId = webhookId.first(),
-        webhookIntervalSeconds = webhookIntervalSeconds.first()
+        webhookIntervalSeconds = webhookIntervalSeconds.first(),
+        obdProtocol = obdProtocol.first()
     )
 
     val cachedPids: Flow<Set<Int>> = dataStore.data.map { prefs ->

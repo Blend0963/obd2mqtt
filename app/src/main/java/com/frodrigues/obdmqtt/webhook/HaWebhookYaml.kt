@@ -12,10 +12,10 @@ object HaWebhookYaml {
 
     fun generate(config: AppConfig, pids: Set<Int>): String = buildString {
         val mac = config.btDeviceMac.replace(":", "").ifBlank { "car" }
-        appendLine("# OBD2 Bridge → Home Assistant (HTTPS webhook)")
-        appendLine("# Paste into configuration.yaml (or a file in /config/packages/),")
-        appendLine("# then Developer tools → YAML → Template entities (reload).")
-        appendLine("# The webhook ID below is a secret: treat it like a password.")
+        appendLine("# ${config.deviceName} — OBD2 → Home Assistant (webhook HTTPS)")
+        appendLine("# À coller dans configuration.yaml (ou un fichier de /config/packages/),")
+        appendLine("# puis Outils de développement → YAML → Entités de modèle (recharger).")
+        appendLine("# L'ID du webhook ci-dessous est secret : traitez-le comme un mot de passe.")
         appendLine("template:")
         appendLine("  - triggers:")
         appendLine("      - trigger: webhook")

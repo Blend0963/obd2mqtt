@@ -21,7 +21,10 @@ class FakeTransport(
         _isConnected.value = false
     }
 
-    override suspend fun sendCommand(command: String): String {
+    val timeouts = mutableMapOf<String, Long>()
+
+    override suspend fun sendCommand(command: String, timeoutMs: Long): String {
+        timeouts[command.trim()] = timeoutMs
         sentCommands.add(command.trim())
         return responses[command.trim()] ?: "NO DATA"
     }

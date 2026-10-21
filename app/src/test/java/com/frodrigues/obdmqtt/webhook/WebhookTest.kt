@@ -96,7 +96,7 @@ class WebhookTest {
         assertTrue(yaml.contains("allowed_methods: [POST]"))
         assertEquals(3, Regex("- name: ").findAll(yaml).count())
         assertTrue(yaml.contains("unique_id: \"obd2_AABBCCDDEEFF_0C\""))
-        assertTrue(yaml.contains("name: \"Test \\\"Car\\\" RPM\""))
+        assertTrue(yaml.contains("name: \"Test \\\"Car\\\" Régime moteur\""))
         assertTrue(yaml.contains("state: \"{{ trigger.json.pids.get('0D') }}\""))
         assertTrue(yaml.contains("state_class: total_increasing"))
         // sensors are emitted in PID order

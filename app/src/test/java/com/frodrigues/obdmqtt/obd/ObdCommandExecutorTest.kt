@@ -8,21 +8,46 @@ import org.junit.Test
 class ObdCommandExecutorTest {
 
     @Test
-    fun `initialize sends all AT commands in order`() = runTest {
+    fun `initialize uses automatic protocol and detects it`() = runTest {
         val transport = FakeTransport(
             responses = mapOf(
                 "ATZ" to "ELM327 v1.5",
                 "ATE0" to "OK",
                 "ATL0" to "OK",
-                "ATH1" to "OK",
-                "ATSP6" to "OK",
-                "ATAT1" to "OK"
+                "ATH0" to "OK",
+                "ATSP0" to "OK",
+                "ATAT1" to "OK",
+                "0100" to "SEARCHING...\r41 00 BE 3E B8 11",
+                "ATDPN" to "A5"
             )
         )
         val executor = ObdCommandExecutor(transport)
         executor.initialize()
 
-        assertEquals(listOf("ATZ", "ATE0", "ATL0", "ATH1", "ATSP6", "ATAT1"), transport.sentCommands)
+        assertEquals(
+            listOf("ATZ", "ATE0", "ATL0", "ATH0", "ATSP0", "ATAT1", "0100", "ATDPN"),
+            transport.sentCommands
+        )
+        assertTrue(transport.timeouts.getValue("0100") >= 10_000)
+        assertEquals(ObdProtocol.ISO_14230_KWP_FAST, executor.detectedProtocol)
+    }
+
+    @Test
+    fun `initialize sends chosen protocol`() = runTest {
+        val transport = FakeTransport(
+            responses = mapOf("ATZ" to "ELM327 v1.5", "0100" to "41 00 BE 3E B8 11", "ATDPN" to "6")
+        )
+        val executor = ObdCommandExecutor(transport, ObdProtocol.ISO_15765_CAN_11_500)
+        executor.initialize()
+
+        assertTrue("ATSP6" in transport.sentCommands)
+        assertEquals(ObdProtocol.ISO_15765_CAN_11_500, executor.detectedProtocol)
+    }
+
+    @Test(expected = java.io.IOException::class)
+    fun `initialize fails when ECU does not answer`() = runTest {
+        val transport = FakeTransport(responses = mapOf("ATZ" to "ELM327 v1.5", "0100" to "UNABLE TO CONNECT"))
+        ObdCommandExecutor(transport).initialize()
     }
 
     @Test

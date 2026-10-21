@@ -51,7 +51,7 @@ class MqttSink(
     private var stateTopics: List<String> = emptyList()
 
     override suspend fun start(scope: CoroutineScope, mac: String, supportedPids: Set<Int>, mode22Pids: Set<Int>) {
-        require(config.mqttHost.isNotBlank()) { "No MQTT host configured" }
+        require(config.mqttHost.isNotBlank()) { "Aucun serveur MQTT configuré" }
         this.mac = mac
         onStatus(ConnectionStatus.CONNECTING)
         publisher.connect()
