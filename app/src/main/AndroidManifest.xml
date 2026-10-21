@@ -49,6 +49,11 @@
             android:foregroundServiceType="connectedDevice"
             android:exported="false" />
 
+        <service
+            android:name=".AutoStartJobService"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:exported="true" />
+
         <receiver
             android:name=".BootReceiver"
             android:directBootAware="true"

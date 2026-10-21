@@ -14,6 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.frodrigues.obdmqtt.obd.PidRegistry
 import com.frodrigues.obdmqtt.service.ConnectionStatus
+import com.frodrigues.obdmqtt.service.OBDCollectorService
 import com.frodrigues.obdmqtt.service.ServiceStatus
 import com.frodrigues.obdmqtt.settings.PublishMode
 import java.text.SimpleDateFormat
@@ -44,10 +45,10 @@ fun MainScreen(
                     serviceStatus == ServiceStatus.RECONNECTING ||
                     serviceStatus == ServiceStatus.WAITING_ENGINE
 
-    val autoStart by viewModel.settings.autoStart.collectAsState(initial = false)
+    val autoStart by viewModel.settings.autoStart.collectAsState(initial = true)
 
     LaunchedEffect(autoStart, serviceStatus) {
-        if (autoStart && serviceStatus == ServiceStatus.IDLE) {
+        if (autoStart && serviceStatus == ServiceStatus.IDLE && !OBDCollectorService.stoppedByUser) {
             viewModel.startService()
         }
     }

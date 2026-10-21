@@ -27,9 +27,8 @@ Dans l'application, ouvrez **Réglages** :
 5. **Intervalle d'envoi** : 1 seconde pour du temps réel.
 6. Appuyez sur **Tester la connexion** : le message « ✓ Serveur joignable » doit s'afficher.
 7. **Scanner OBD2 → Protocole** : laissez **Automatique**, ou choisissez directement **ISO 14230-4 KWP2000 (init rapide)**, le protocole confirmé sur une 407 avec le Vgate iCar Pro. La recherche automatique de l'adaptateur échoue sur cette voiture ; l'application essaie alors elle-même chaque protocole et retient celui qui répond. Selon la motorisation, la 407 utilise le CAN (ISO 15765-4) ou le KWP2000 (ISO 14230-4) ; l'application trouve le bon.
-8. Activez **Démarrage automatique** si le téléphone ou la tablette reste dans la voiture : la collecte démarre avec l'appareil (démarrage complet ou « démarrage rapide » des autoradios) et après chaque mise à jour de l'application. La plupart des autoradios ne redémarrent pas mais se mettent en veille avec le contact : l'application reste alors lancée et se reconnecte d'elle-même dès que l'écran se rallume, sans rien toucher.
-   Au premier lancement, l'application demande aussi à ne plus être limitée par la batterie : acceptez, sinon Android peut couper la collecte en arrière-plan. Vous pouvez y revenir dans **Réglages → Fonctionnement → Restriction batterie d'Android**. Sur certaines tablettes de voiture, autorisez aussi le démarrage automatique de l'application dans les paramètres du constructeur.
-9. Laissez **Lire seulement moteur tournant** activé (voir « Batterie » plus bas).
+8. **Démarrage automatique** est activé par défaut : la collecte démarre toute seule à chaque démarrage de l'appareil (démarrage complet, « démarrage rapide » des autoradios) et après chaque mise à jour, sans ouvrir l'application. Une tâche de secours, conservée par Android d'un redémarrage à l'autre, relance aussi la collecte si l'autoradio ne prévient pas les applications de son démarrage. **Ouvrez l'application une fois après l'installation** : Android ne lance pas une application jamais ouverte. Le **Journal** indique ce qui a démarré la collecte (« Démarrage automatique : démarrage de l'appareil »).
+9. **Lire seulement moteur tournant** est désactivé par défaut : l'application se connecte dès que l'appareil démarre, contact mis. Activez-le seulement si l'appareil reste allumé voiture garée (voir « Batterie »).
 10. *Facultatif* — **Jeton d'accès Home Assistant** : uniquement pour pouvoir effacer les défauts depuis Home Assistant (voir « Diagnostic »).
 
 Revenez à l'écran principal et appuyez sur **Démarrer**, **moteur tournant**. Au premier lancement, l'application interroge tous les PIDs pour savoir lesquels la 407 gère (de 30 secondes à quelques minutes ; l'avancement s'affiche dans la notification). Le résultat est mémorisé.
@@ -90,7 +89,7 @@ Seuls les défauts du **calculateur moteur** sont accessibles en OBD2. ABS/ESP, 
 
 ## Batterie : adaptateur laissé branché
 
-La prise OBD est alimentée en permanence. Avec **Lire seulement moteur tournant** (activé par défaut), l'application lit d'abord la tension batterie mesurée par l'adaptateur, ce qui ne réveille aucun calculateur :
+La prise OBD est alimentée en permanence. Avec **Lire seulement moteur tournant** (désactivé par défaut, utile seulement si l'appareil reste allumé voiture garée), l'application lit d'abord la tension batterie mesurée par l'adaptateur, ce qui ne réveille aucun calculateur :
 - **au-dessus de 13,3 V**, l'alternateur charge, donc le moteur tourne : l'application interroge la voiture ;
 - **en dessous**, elle ne l'interroge pas, affiche « Moteur arrêté » et revérifie toutes les 20 secondes pendant les 10 minutes qui suivent le démarrage de l'appareil (l'autoradio s'allume avant le moteur), puis toutes les 2 minutes, et aussitôt que l'écran se rallume ou que le Bluetooth revient (réveil de l'autoradio au démarrage).
 

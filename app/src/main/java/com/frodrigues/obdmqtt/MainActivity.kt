@@ -32,6 +32,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        AutoStart.scheduleWatchdog(this)
 
         // Before Android 12 Bluetooth access is an install-time permission; notifications need asking from 13
         val runtimePermissions = buildList {
