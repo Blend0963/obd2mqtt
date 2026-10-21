@@ -28,6 +28,7 @@ Dans l'application, ouvrez **Réglages** :
 6. Appuyez sur **Tester la connexion** : le message « ✓ Serveur joignable » doit s'afficher.
 7. **Scanner OBD2 → Protocole** : laissez **Automatique**. Selon la motorisation, la 407 utilise le CAN (ISO 15765-4) ou le KWP2000 (ISO 14230-4) ; l'application trouve le bon.
 8. Activez **Démarrage automatique** si le téléphone reste dans la voiture.
+   Au premier lancement, l'application demande aussi à ne plus être limitée par la batterie : acceptez, sinon Android peut couper la collecte en arrière-plan. Vous pouvez y revenir dans **Réglages → Fonctionnement → Restriction batterie d'Android**. Sur certaines tablettes de voiture, autorisez aussi le démarrage automatique de l'application dans les paramètres du constructeur.
 9. Laissez **Lire seulement moteur tournant** activé (voir « Batterie » plus bas).
 10. *Facultatif* — **Jeton d'accès Home Assistant** : uniquement pour pouvoir effacer les défauts depuis Home Assistant (voir « Diagnostic »).
 

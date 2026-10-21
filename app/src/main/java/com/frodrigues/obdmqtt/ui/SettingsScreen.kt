@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.frodrigues.obdmqtt.BatteryOptimization
 import com.frodrigues.obdmqtt.mqtt.testMqttConnection
 import com.frodrigues.obdmqtt.obd.ObdProtocol
 import com.frodrigues.obdmqtt.settings.AppConfig
@@ -108,9 +109,14 @@ fun SettingsScreen(
         } catch (_: SecurityException) { emptyList() }
     }
 
+    var batteryExempt by remember { mutableStateOf(BatteryOptimization.isExempt(context)) }
+
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) refreshDevices()
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                refreshDevices()
+                batteryExempt = BatteryOptimization.isExempt(context)
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -715,6 +721,28 @@ fun SettingsScreen(
                             syncAutoStartToDeStorage(context, newValue)
                         }
                     }
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ListItem(
+                    headlineContent = { Text("Restriction batterie d'Android") },
+                    supportingContent = {
+                        Text(
+                            text = if (batteryExempt)
+                                "Désactivée ✓ — la collecte peut tourner en arrière-plan."
+                            else
+                                "Active : Android peut arrêter la collecte en arrière-plan. Appuyez pour la désactiver.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (batteryExempt) MaterialTheme.colorScheme.onSurfaceVariant
+                                    else MaterialTheme.colorScheme.error
+                        )
+                    },
+                    colors = ListItemDefaults.colors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    ),
+                    modifier = Modifier.clickable(
+                        enabled = !batteryExempt,
+                        onClickLabel = "Désactiver la restriction batterie"
+                    ) { BatteryOptimization.requestExemption(context) }
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 ListItem(

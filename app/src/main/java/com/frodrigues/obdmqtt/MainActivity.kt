@@ -23,7 +23,10 @@ class MainActivity : ComponentActivity() {
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { /* handle result: service will handle missing permissions gracefully */ }
+    ) {
+        // Service handles missing permissions gracefully; ask for the battery exemption next
+        BatteryOptimization.requestOnFirstLaunch(this)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,6 +43,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         if (runtimePermissions.isNotEmpty()) permissionLauncher.launch(runtimePermissions.toTypedArray())
+        else BatteryOptimization.requestOnFirstLaunch(this)
 
         setContent {
             OdbMqttTheme {
