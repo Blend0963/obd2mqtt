@@ -31,6 +31,7 @@ import com.frodrigues.obdmqtt.settings.AppConfig
 import com.frodrigues.obdmqtt.webhook.ClearButtonWatcher
 import com.frodrigues.obdmqtt.webhook.HaApiClient
 import com.frodrigues.obdmqtt.webhook.HaEntities
+import com.frodrigues.obdmqtt.util.DebugLog
 import com.frodrigues.obdmqtt.webhook.buildWebhookUrl
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -68,6 +69,7 @@ class OBDCollectorService : LifecycleService() {
     override fun onCreate() {
         super.onCreate()
         status.value = ServiceStatus.IDLE
+        statusText.value = ""
         activePidCount.value = 0
         lastUpdateTime.value = 0L
         btStatus.value = ConnectionStatus.DISCONNECTED
@@ -127,6 +129,7 @@ class OBDCollectorService : LifecycleService() {
                 engineOffVoltage.value = e.voltage
             } catch (e: Exception) {
                 Log.w(TAG, "Collect failed: ${e.message}")
+                DebugLog.add("ERREUR ${e.javaClass.simpleName} : ${e.message}")
                 if (bypassEngineGate) failPendingRequests("Le calculateur ne répond pas : mettez le contact puis réessayez")
                 if (ecuConnected) { engineOff = false; attempt = 0 }
                 updateNotification("Erreur : ${e.message?.take(80)}")
@@ -226,6 +229,7 @@ class OBDCollectorService : LifecycleService() {
             updateNotification("Connexion au calculateur et recherche du protocole…")
             executor.connectEcu()
             ecuConnected = true
+            DebugLog.add("Calculateur connecté — protocole : ${executor.detectedProtocol?.label ?: "inconnu"}")
             engineOffVoltage.value = null
             while (wakeups.tryReceive().isSuccess) Unit  // requests are handled by the diagnostics loop below
             obdProtocolLabel.value = executor.detectedProtocol?.label ?: ""
@@ -277,6 +281,7 @@ class OBDCollectorService : LifecycleService() {
                 }
 
                 val currentReadings = mutableMapOf<Int, Double>()
+                executor.logCommands = false  // polling is ~10 commands/s: keep the log readable
 
                 PidPoller(executor = executor, fastPids = activeFast, slowPids = activeSlow).readings().collect { reading ->
                     currentReadings[reading.pid] = reading.value
@@ -390,7 +395,10 @@ class OBDCollectorService : LifecycleService() {
             )
             .build()
 
+    /** Shows [text] in the notification, on the main screen and in the connection log. */
     private fun updateNotification(text: String) {
+        if (statusText.value != text) DebugLog.add(text)
+        statusText.value = text
         getSystemService(NotificationManager::class.java)
             .notify(NOTIFICATION_ID, buildNotification(text))
     }
@@ -409,6 +417,8 @@ class OBDCollectorService : LifecycleService() {
         val pidReadings = MutableStateFlow<Map<Int, Double>>(emptyMap())
         /** OBD protocol detected by the ELM327, e.g. "ISO 15765-4 CAN 11 bits 500 kbit/s". */
         val obdProtocolLabel = MutableStateFlow("")
+        /** Current step ("Recherche des PIDs (12/254)…"), also shown on the main screen. */
+        val statusText = MutableStateFlow("")
         /** Last fault-code read; kept after disconnect so the UI shows the last known state. */
         val diagnostics = MutableStateFlow<DiagnosticReport?>(null)
         val clearResult = MutableStateFlow<ClearResult?>(null)
