@@ -38,6 +38,7 @@ Dans l'application, ouvrez **Réglages** :
            intent_package_name: com.frodrigues.obdmqtt
            intent_action: com.frodrigues.obdmqtt.action.START
    ```
+   Certains autoradios **arrêtent de force toutes les applications** quand on coupe le contact : l'application ne reçoit alors plus rien (ni démarrage, ni intention) tant qu'elle n'a pas été rouverte. Dans ce cas, utilisez `command_activity` à la place de `command_broadcast_intent` (mêmes paramètres) : elle passe par un écran invisible qui fonctionne même dans cet état. L'appli Home Assistant doit avoir l'autorisation « Afficher par-dessus les autres applications ».
 9. **Lire seulement moteur tournant** est désactivé par défaut : l'application se connecte dès que l'appareil démarre, contact mis. Activez-le seulement si l'appareil reste allumé voiture garée (voir « Batterie »).
 10. *Facultatif* — **Jeton d'accès Home Assistant** : uniquement pour pouvoir effacer les défauts depuis Home Assistant (voir « Diagnostic »).
 
