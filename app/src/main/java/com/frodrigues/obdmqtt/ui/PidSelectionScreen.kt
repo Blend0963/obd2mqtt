@@ -68,8 +68,9 @@ fun PidSelectionScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "Rapide (${PidPoller.FAST_INTERVAL_SECONDS} s) — ${PidPoller.FAST_PID_LIMIT} PIDs maximum\n" +
-                        "Lu chaque seconde. Pour les données de conduite en direct : régime, vitesse, charge…",
+                        "Rapide (en continu) — ${PidPoller.FAST_PID_LIMIT} PIDs maximum\n" +
+                        "Lus l'un après l'autre, aussi vite que la voiture répond (≈ 80 ms par PID en KWP2000) : " +
+                        "moins il y en a, plus ils se rafraîchissent vite. Pour les données de conduite : régime, vitesse, charge…",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(

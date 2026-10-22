@@ -324,7 +324,7 @@ class OBDCollectorService : LifecycleService() {
                 val activeFast = supportedPids.intersect(settings.fastPids.first())
                 val activeSlow = supportedPids.intersect(settings.slowPids.first())
 
-                updateNotification("Connecté — ${activeFast.size} rapides (${PidPoller.FAST_INTERVAL_SECONDS} s) + ${activeSlow.size} lents (${PidPoller.SLOW_INTERVAL_SECONDS} s)")
+                updateNotification("Connecté — ${activeFast.size} rapides (en continu) + ${activeSlow.size} lents (${PidPoller.SLOW_INTERVAL_SECONDS} s)")
 
                 launch { diagnosticsLoop(DtcReader(executor), sink) }
                 launch {
@@ -337,7 +337,12 @@ class OBDCollectorService : LifecycleService() {
                 val currentReadings = mutableMapOf<Int, Double>()
                 executor.logCommands = false  // polling is ~10 commands/s: keep the log readable
 
-                PidPoller(executor = executor, fastPids = activeFast, slowPids = activeSlow).readings().collect { reading ->
+                cycleMs.value = 0L
+                PidPoller(
+                    executor = executor, fastPids = activeFast, slowPids = activeSlow,
+                    // Smoothed, so the screen doesn't flicker with each slow PID slipped in
+                    onCycle = { ms -> cycleMs.value = if (cycleMs.value == 0L) ms else (cycleMs.value * 3 + ms) / 4 }
+                ).readings().collect { reading ->
                     currentReadings[reading.pid] = reading.value
                     val snapshot = currentReadings.toMap()
                     pidReadings.value = snapshot
@@ -355,6 +360,7 @@ class OBDCollectorService : LifecycleService() {
             serverStatus.value = ConnectionStatus.DISCONNECTED
             pidReadings.value = emptyMap()
             obdProtocolLabel.value = ""
+            cycleMs.value = 0L
         }
     }
 
@@ -472,6 +478,8 @@ class OBDCollectorService : LifecycleService() {
         val pidReadings = MutableStateFlow<Map<Int, Double>>(emptyMap())
         /** OBD protocol detected by the ELM327, e.g. "ISO 15765-4 CAN 11 bits 500 kbit/s". */
         val obdProtocolLabel = MutableStateFlow("")
+        /** How long one read of all fast PIDs takes (ms, smoothed); 0 when not polling. */
+        val cycleMs = MutableStateFlow(0L)
         /** Current step ("Recherche des PIDs (12/254)…"), also shown on the main screen. */
         val statusText = MutableStateFlow("")
         /** Set when the user taps "Arrêter"; reset at process start (reboot) or on "Démarrer". */

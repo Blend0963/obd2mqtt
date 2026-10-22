@@ -38,7 +38,8 @@ data class AppConfig(
     val publishMode: PublishMode = PublishMode.WEBHOOK,
     val haUrl: String = "",
     val webhookId: String = "",
-    val webhookIntervalSeconds: Int = AppSettings.DEFAULT_WEBHOOK_INTERVAL_SECONDS,
+    /** Minimum time between two webhook POSTs; new readings are sent as soon as it has elapsed. */
+    val webhookIntervalMs: Int = AppSettings.DEFAULT_WEBHOOK_INTERVAL_MS,
     val obdProtocol: ObdProtocol = ObdProtocol.AUTO,
     /** Only query the ECU when the alternator is charging, so a parked car is never woken up. */
     val engineRunningOnly: Boolean = false,
@@ -77,9 +78,12 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
         val PUBLISH_MODE = stringPreferencesKey("publishMode")
         val HA_URL = stringPreferencesKey("haUrl")
         val WEBHOOK_ID = stringPreferencesKey("webhookId")
+        /** Before 1.0.9: whole seconds. Read once to migrate custom slower intervals. */
         val WEBHOOK_INTERVAL = intPreferencesKey("webhookIntervalSeconds")
+        val WEBHOOK_INTERVAL_MS = intPreferencesKey("webhookIntervalMs")
 
-        const val DEFAULT_WEBHOOK_INTERVAL_SECONDS = 1
+        const val DEFAULT_WEBHOOK_INTERVAL_MS = 300
+        const val MIN_WEBHOOK_INTERVAL_MS = 200
         val OBD_PROTOCOL = stringPreferencesKey("obdProtocol")
         /** Protocol found in AUTO mode, tried first next time. */
         val LAST_OBD_PROTOCOL = stringPreferencesKey("lastObdProtocol")
@@ -152,8 +156,11 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
     }
     val haUrl: Flow<String> = dataStore.data.map { it[HA_URL] ?: "" }
     val webhookId: Flow<String> = dataStore.data.map { it[WEBHOOK_ID] ?: "" }
-    val webhookIntervalSeconds: Flow<Int> = dataStore.data.map {
-        it[WEBHOOK_INTERVAL] ?: DEFAULT_WEBHOOK_INTERVAL_SECONDS
+    /** The old 1 s default becomes the new faster default; a slower custom value is kept. */
+    val webhookIntervalMs: Flow<Int> = dataStore.data.map { prefs ->
+        prefs[WEBHOOK_INTERVAL_MS]
+            ?: prefs[WEBHOOK_INTERVAL]?.takeIf { it > 1 }?.let { it * 1000 }
+            ?: DEFAULT_WEBHOOK_INTERVAL_MS
     }
 
     suspend fun snapshot(): AppConfig = AppConfig(
@@ -168,7 +175,7 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
         publishMode = publishMode.first(),
         haUrl = haUrl.first(),
         webhookId = webhookId.first(),
-        webhookIntervalSeconds = webhookIntervalSeconds.first(),
+        webhookIntervalMs = webhookIntervalMs.first(),
         obdProtocol = obdProtocol.first(),
         engineRunningOnly = engineRunningOnly.first(),
         haToken = haToken.first(),

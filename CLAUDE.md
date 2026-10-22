@@ -50,7 +50,7 @@ ELM327 ──BT──► BluetoothTransport (Classic/BLE)
 
 **`PidScanner`** — Probes Mode 01 PIDs 0x01–0xFF (excluding support PIDs). Results cached in DataStore (`cachedPids`). Cache cleared via Settings "Rescan PIDs". **`Mode22Scanner`** — Same pattern for Mode 22 (2-byte PIDs), cached separately.
 
-**`PidPoller`** — Polls `fastPids` every 1s cycle plus a slice of `slowPids`, so each slow PID is read once per `SLOW_INTERVAL_SECONDS` (10s) without bursts. Emits `PidReading` via a `Flow`. Commands come from `PidRegistry.command(pid)`; pseudo-PID `PidRegistry.ADAPTER_VOLTAGE` (0x100) reads the battery voltage with `ATRV`.
+**`PidPoller`** — Reads `fastPids` back to back, as fast as the ECU answers (≈ 80 ms per request on KWP2000, `MIN_CYCLE_MS` guard), and slips in one `slowPids` entry every `SLOW_INTERVAL_MS` / n (time-based, injectable `clock`), so each slow PID is read once per 10 s without slowing the fast ones. `onCycle` reports the cycle time (`OBDCollectorService.cycleMs`, shown on the main screen). Emits `PidReading` via a `Flow`. Commands come from `PidRegistry.command(pid)`; pseudo-PID `PidRegistry.ADAPTER_VOLTAGE` (0x100) reads the battery voltage with `ATRV`.
 
 **`ObdProtocol`** — ELM327 protocol numbers. Default `AUTO` because the target car (Peugeot 407) exists in CAN and KWP2000 variants: `connectEcu()` tries the last working protocol, then `ATSP0`, then each protocol of `AUTO_FALLBACK` explicitly (`ATPC` between attempts) — the ELM327 search returned UNABLE TO CONNECT on a real 407 — and the service saves the one that answered (`LAST_OBD_PROTOCOL`). Headers are off (`ATH0`) so KWP headers/checksums never mix with data bytes. Mode 22 scanning is skipped while `Mode22Registry.definitions` is empty.
 
@@ -66,7 +66,7 @@ ELM327 ──BT──► BluetoothTransport (Classic/BLE)
 
 **`AppSettings`** — DataStore-backed settings. `snapshot()` returns a one-shot `AppConfig` for use in the service. PID caches are hex-encoded comma-separated strings. Fast PIDs default to `DEFAULT_FAST_PIDS`; until the user edits the selection, every other discovered PID is slow ("all data").
 
-**`TelemetrySink`** (`service/`) — Where readings go, chosen by `AppConfig.publishMode`. `MqttSink` wraps `MqttPublisher` + HA Discovery; `WebhookSink` POSTs the latest snapshot every `webhookIntervalSeconds` from a background loop (failures only flip `serverStatus`, never the BT session).
+**`TelemetrySink`** (`service/`) — Where readings go, chosen by `AppConfig.publishMode`. `MqttSink` wraps `MqttPublisher` + HA Discovery; `WebhookSink` POSTs the newest snapshot as soon as a reading arrives, at most once per `webhookIntervalMs` (default 300 ms, min 200; the pre-1.0.9 seconds setting is migrated), from a background loop (failures only flip `serverStatus`, never the BT session).
 
 **`webhook/`** — `HaDashboardYaml` (Lovelace dashboard; entity IDs = HA slugify of sensor names), `WebhookPublisher` (HTTPS POST to `<haUrl>/api/webhook/<id>`, URL validated by `buildWebhookUrl`, which rejects non-HTTPS), `WebhookPayload` (JSON bodies, PIDs keyed by hex), `HaWebhookYaml` (generates the HA trigger-based template sensors YAML copied from Settings).
 

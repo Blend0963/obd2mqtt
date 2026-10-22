@@ -6,6 +6,7 @@ import com.frodrigues.obdmqtt.obd.DiagnosticReport
 import com.frodrigues.obdmqtt.obd.Mode22Registry
 import com.frodrigues.obdmqtt.obd.PidReading
 import com.frodrigues.obdmqtt.settings.AppConfig
+import com.frodrigues.obdmqtt.settings.AppSettings
 import com.frodrigues.obdmqtt.settings.PublishMode
 import com.frodrigues.obdmqtt.util.jsonString
 import com.frodrigues.obdmqtt.util.pidHex
@@ -17,6 +18,7 @@ import com.frodrigues.obdmqtt.webhook.buildWebhookUrl
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -145,10 +147,10 @@ class MqttSink(
 }
 
 /**
- * Sends the latest snapshot every [AppConfig.webhookIntervalSeconds] from a
- * background loop, so a slow or dead WAN link never stalls OBD polling and
- * never tears down the Bluetooth session. Failed sends are retried on the
- * next tick with whatever is newest.
+ * Sends the newest snapshot as soon as a reading arrives, at most once per
+ * [AppConfig.webhookIntervalMs], from a background loop, so a slow or dead WAN
+ * link never stalls OBD polling and never tears down the Bluetooth session.
+ * Failed sends are retried (after [RETRY_DELAY_MS]) with whatever is newest.
  */
 class WebhookSink(
     private val config: AppConfig,
@@ -158,6 +160,8 @@ class WebhookSink(
     private var publisher: WebhookPublisher? = null
     private var senderJob: Job? = null
     private val pending = AtomicReference<Map<Int, Double>?>(null)
+    /** Wakes the sender; conflated, so a burst of readings costs one send. */
+    private val newData = Channel<Unit>(Channel.CONFLATED)
     @Volatile private var lastSnapshot: Map<Int, Double> = emptyMap()
     @Volatile private var diagnostics: DiagnosticReport? = null
 
@@ -166,19 +170,25 @@ class WebhookSink(
         val p = WebhookPublisher(buildWebhookUrl(config.haUrl, config.webhookId))
         publisher = p
         onStatus(ConnectionStatus.CONNECTING)
-        val intervalMs = config.webhookIntervalSeconds.coerceAtLeast(1) * 1000L
+        val intervalMs = config.webhookIntervalMs.coerceAtLeast(AppSettings.MIN_WEBHOOK_INTERVAL_MS).toLong()
         senderJob = scope.launch {
+            var lastSentAt = 0L
             while (isActive) {
-                delay(intervalMs)
+                newData.receive()
+                val wait = lastSentAt + intervalMs - System.currentTimeMillis()
+                if (wait > 0) delay(wait)
                 val snapshot = pending.getAndSet(null) ?: continue
+                lastSentAt = System.currentTimeMillis()
                 try {
-                    p.post(WebhookPayload.readings(snapshot, config.deviceName, System.currentTimeMillis(), diagnostics))
+                    p.post(WebhookPayload.readings(snapshot, config.deviceName, lastSentAt, diagnostics))
                     onStatus(ConnectionStatus.CONNECTED)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     onStatus(ConnectionStatus.DISCONNECTED)
                     pending.compareAndSet(null, snapshot)  // keep it unless a newer one arrived
+                    delay(RETRY_DELAY_MS)
+                    newData.trySend(Unit)
                 }
             }
         }
@@ -187,11 +197,13 @@ class WebhookSink(
     override suspend fun publish(reading: PidReading, snapshot: Map<Int, Double>) {
         lastSnapshot = snapshot
         pending.set(snapshot)
+        newData.trySend(Unit)
     }
 
     override suspend fun publishDiagnostics(report: DiagnosticReport) {
         diagnostics = report
-        pending.compareAndSet(null, lastSnapshot)  // make the next tick send it even without new readings
+        pending.compareAndSet(null, lastSnapshot)  // send it even without new readings
+        newData.trySend(Unit)
     }
 
     override suspend fun stop() {
@@ -205,5 +217,10 @@ class WebhookSink(
         }
         publisher = null
         onStatus(ConnectionStatus.DISCONNECTED)
+    }
+
+    private companion object {
+        /** A dead link isn't hammered at the reading rate. */
+        const val RETRY_DELAY_MS = 2_000L
     }
 }

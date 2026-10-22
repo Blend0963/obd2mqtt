@@ -74,7 +74,7 @@ fun SettingsScreen(
     var localWebhookId by rememberSaveable { mutableStateOf("") }
     var localHaToken by rememberSaveable { mutableStateOf("") }
     var localWebhookInterval by rememberSaveable {
-        mutableStateOf(AppSettings.DEFAULT_WEBHOOK_INTERVAL_SECONDS.toString())
+        mutableStateOf(formatSeconds(AppSettings.DEFAULT_WEBHOOK_INTERVAL_MS))
     }
     var fieldsInitialized by rememberSaveable { mutableStateOf(false) }
 
@@ -94,7 +94,7 @@ fun SettingsScreen(
                 // Webhook is the default mode: give a fresh install its secret right away
                 generateWebhookId().also { id -> settings.update { this[AppSettings.WEBHOOK_ID] = id } }
             }
-            localWebhookInterval = snap.webhookIntervalSeconds.toString()
+            localWebhookInterval = formatSeconds(snap.webhookIntervalMs)
             localHaToken = snap.haToken
             fieldsInitialized = true
         }
@@ -136,8 +136,7 @@ fun SettingsScreen(
         publishMode = publishMode,
         haUrl = localHaUrl,
         webhookId = localWebhookId,
-        webhookIntervalSeconds = localWebhookInterval.toIntOrNull()
-            ?: AppSettings.DEFAULT_WEBHOOK_INTERVAL_SECONDS,
+        webhookIntervalMs = parseIntervalMs(localWebhookInterval) ?: AppSettings.DEFAULT_WEBHOOK_INTERVAL_MS,
         haToken = localHaToken
     )
 
@@ -344,14 +343,17 @@ fun SettingsScreen(
                         value = localWebhookInterval,
                         onValueChange = { v ->
                             localWebhookInterval = v
-                            v.toIntOrNull()?.takeIf { it >= 1 }?.let { seconds ->
-                                scope.launch { settings.update { this[AppSettings.WEBHOOK_INTERVAL] = seconds } }
+                            parseIntervalMs(v)?.let { ms ->
+                                scope.launch { settings.update { this[AppSettings.WEBHOOK_INTERVAL_MS] = ms } }
                             }
                         },
-                        label = { Text("Intervalle d'envoi (s)") },
-                        supportingText = { Text("Les dernières valeurs sont envoyées à ce rythme (1 = temps réel)") },
+                        label = { Text("Intervalle d'envoi minimum (s)") },
+                        supportingText = {
+                            Text("Les nouvelles valeurs partent dès que ce délai est écoulé (0,3 = quasi instantané, 0,2 minimum)")
+                        },
+                        isError = parseIntervalMs(localWebhookInterval) == null,
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
@@ -867,3 +869,13 @@ private fun SectionLabel(text: String) {
         color = MaterialTheme.colorScheme.primary
     )
 }
+
+/** "0,3" or "0.3" seconds → 300 ms; null when not a number or below the minimum. */
+internal fun parseIntervalMs(text: String): Int? =
+    text.trim().replace(',', '.').toDoubleOrNull()
+        ?.let { kotlin.math.round(it * 1000).toInt() }
+        ?.takeIf { it >= AppSettings.MIN_WEBHOOK_INTERVAL_MS }
+
+/** 300 → "0,3", 1000 → "1" (French decimal comma). */
+internal fun formatSeconds(ms: Int): String =
+    java.math.BigDecimal(ms).movePointLeft(3).stripTrailingZeros().toPlainString().replace('.', ',')
