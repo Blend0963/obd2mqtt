@@ -156,10 +156,7 @@ fun SettingsScreen(
     val cachedPids by settings.cachedPids.collectAsState(initial = emptySet())
     val selectedFastPids by settings.fastPids.collectAsState(initial = emptySet())
     val selectedSlowPids by settings.slowPids.collectAsState(initial = emptySet())
-    fun polledPids(): Set<Int> {
-        val polled = selectedFastPids + selectedSlowPids
-        return if (cachedPids.isEmpty()) polled else polled.intersect(cachedPids)
-    }
+    fun polledPids(): Set<Int> = (selectedFastPids + selectedSlowPids).intersect(cachedPids)
 
     val obdProtocol by settings.obdProtocol.collectAsState(initial = ObdProtocol.AUTO)
     var showProtocolDialog by remember { mutableStateOf(false) }
@@ -430,12 +427,24 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    // Before the first scan the app doesn't know the car's PIDs: a copy then
+                    // would miss sensors (or list unsupported ones) and use no adapter address
+                    val readyToCopy = cachedPids.isNotEmpty() && btMac.isNotBlank()
+                    if (!readyToCopy) {
+                        Text(
+                            text = "Choisissez l'adaptateur et connectez-vous une fois à la voiture " +
+                                   "(moteur tournant) avant de copier la configuration : elle ne contient " +
+                                   "que les mesures trouvées par la recherche des PIDs.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                     OutlinedButton(
                         onClick = {
                             val pids = polledPids()
                             copyToClipboard(context, "Configuration HA", HaWebhookYaml.generate(currentConfig(), pids))
                         },
-                        enabled = localWebhookId.isNotBlank(),
+                        enabled = localWebhookId.isNotBlank() && readyToCopy,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("1. Copier la configuration Home Assistant")

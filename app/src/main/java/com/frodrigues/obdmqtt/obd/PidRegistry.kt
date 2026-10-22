@@ -8,6 +8,12 @@ object PidRegistry {
      */
     const val ADAPTER_VOLTAGE = 0x100
 
+    /**
+     * Announced by the ECU but not measurements (monitor status, OBD standard, sensors
+     * present, scaling limits…): never polled nor sent to Home Assistant.
+     */
+    val STATUS_PIDS: Set<Int> = setOf(0x01, 0x02, 0x03, 0x12, 0x13, 0x1C, 0x1D, 0x1E, 0x41, 0x4F, 0x50)
+
     val definitions: Map<Int, PidDefinition> = mapOf(
         // ── Engine / Load ─────────────────────────────────────────────────────
         0x04 to PidDefinition(0x04, "Charge moteur", "%", null) { b ->
@@ -143,6 +149,11 @@ object PidRegistry {
         },
 
         // ── Air-Fuel Ratio ────────────────────────────────────────────────────
+        // Wide-band sensor: equivalence ratio from A,B (C,D = voltage). Capped at 2 by the
+        // OBD scaling, so a diesel at idle (very lean) reads 2
+        0x24 to PidDefinition(0x24, "Lambda sonde 1", "λ", null) { b ->
+            2.0 * (b.u(0) * 256 + b.u(1)) / 65536.0
+        },
         0x44 to PidDefinition(0x44, "Richesse commandée", "ratio", null) { b ->
             2.0 * (b.u(0) * 256 + b.u(1)) / 65536.0
         },

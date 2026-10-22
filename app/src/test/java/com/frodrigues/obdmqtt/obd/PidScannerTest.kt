@@ -103,4 +103,21 @@ class PidScannerTest {
         assertEquals(AppSettings.DEFAULT_FAST_PIDS, fast)
         assertEquals(setOf(0x0F, 0x33), slow)
     }
+
+    @Test
+    fun `status pids are not kept as measurements`() = runTest {
+        // 0100: 01 (monitor status), 04, 05 (byte 0 = 0x98); 12, 13 (byte 2 = 0x60); 1C (byte 3 = 0x10)
+        val transport = FakeTransport(responses = mapOf("0100" to "41 00 98 00 60 10"))
+
+        val supported = PidScanner(ObdCommandExecutor(transport), settings).scan()
+
+        assertEquals(setOf(0x04, 0x05), supported)
+    }
+
+    @Test
+    fun `status pids saved by older versions are dropped from the cache`() = runTest {
+        settings.update { this[AppSettings.CACHED_PIDS] = "1,4,C,12,13,1C,24,4F" }
+
+        assertEquals(setOf(0x04, 0x0C, 0x24), settings.cachedPids.first())
+    }
 }

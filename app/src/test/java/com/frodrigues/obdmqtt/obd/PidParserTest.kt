@@ -29,6 +29,14 @@ class PidParserTest {
     }
 
     @Test
+    fun `parses wide-band lambda correctly`() {
+        // 80 00 → 2 * 32768 / 65536 = 1.0 (stoichiometric); C,D = sensor voltage, ignored
+        val result = PidParser.parse(0x24, "41 24 80 00 80 00")
+        assertNotNull(result)
+        assertEquals(1.0, result!!, 0.001)
+    }
+
+    @Test
     fun `parses fuel level correctly`() {
         // 80 → 100 * 128 / 255 ≈ 50.2%
         val result = PidParser.parse(0x2F, "41 2F 80")

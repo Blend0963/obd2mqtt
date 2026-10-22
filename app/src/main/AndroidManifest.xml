@@ -67,6 +67,16 @@
             </intent-filter>
         </receiver>
 
+        <!-- Silent start/stop for Home Assistant, Tasker, MacroDroid (see StartReceiver) -->
+        <receiver
+            android:name=".StartReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.frodrigues.obdmqtt.action.START" />
+                <action android:name="com.frodrigues.obdmqtt.action.STOP" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
 </manifest>
