@@ -67,6 +67,21 @@
             </intent-filter>
         </receiver>
 
+        <!-- Same commands as StartReceiver, also when the car unit has force-stopped the app -->
+        <activity
+            android:name=".StartActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="com.frodrigues.obdmqtt.action.START" />
+                <action android:name="com.frodrigues.obdmqtt.action.STOP" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <!-- Silent start/stop for Home Assistant, Tasker, MacroDroid (see StartReceiver) -->
         <receiver
             android:name=".StartReceiver"
