@@ -106,4 +106,14 @@ class HaDashboardYamlTest {
         // Diagnostic view is always there
         assertTrue(yaml.contains("  - title: \"Diagnostic\""))
     }
+
+    @Test
+    fun `device name only appears in entity ids`() {
+        listOf(DashboardStyle.STANDARD, DashboardStyle.HACS).forEach { style ->
+            val yaml = HaDashboardYaml.generate(config, setOf(0x0C, 0x0D, 0x05, PidRegistry.ADAPTER_VOLTAGE), style)
+            val visible = yaml.lines().filterNot { "entity" in it || "state_attr" in it }
+            assertTrue(visible.none { "Peugeot" in it })
+            assertTrue(yaml.contains("title: Voiture"))
+        }
+    }
 }

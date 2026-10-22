@@ -132,7 +132,7 @@ object HaDashboardYaml {
 
     fun generate(config: AppConfig, pids: Set<Int>, style: DashboardStyle = DashboardStyle.STANDARD): String = buildString {
         val r = Renderer(this, config, pids, style == DashboardStyle.HACS)
-        appendLine("# Tableau de bord ${config.deviceName} — un onglet par thème")
+        appendLine("# Tableau de bord voiture — un onglet par thème")
         if (r.hacs) {
             appendLine("# Version avancée : installez d'abord ces cartes dans HACS (Interface / Frontend),")
             appendLine("# puis rechargez la page :")
@@ -140,7 +140,8 @@ object HaDashboardYaml {
         }
         appendLine("# Paramètres → Tableaux de bord → Ajouter → Nouveau tableau de bord,")
         appendLine("# puis ⋮ → Modifier → ⋮ → Éditeur de configuration brute, et coller ce contenu.")
-        appendLine("title: ${q(config.deviceName)}")
+        // Short names everywhere: the device name only lives in entity IDs
+        appendLine("title: Voiture")
         appendLine("views:")
         VIEWS.forEach { r.view(it) }
         if (pids.isNotEmpty()) {
@@ -250,7 +251,10 @@ object HaDashboardYaml {
                 // The built-in graph shows whole hours: live graphs get the last hour
                 line("        hours_to_show: ${maxOf(card.hours, 1)}")
                 line("        entities:")
-                pids.forEach { line("          - entity: ${ha.pidEntityId(it)}") }
+                pids.forEach { pid ->
+                    line("          - entity: ${ha.pidEntityId(pid)}")
+                    line("            name: ${q(PidRegistry.getOrUnknown(pid).name)}")
+                }
             }
         }
 
