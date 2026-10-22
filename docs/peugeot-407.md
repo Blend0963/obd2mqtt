@@ -28,6 +28,16 @@ Dans l'application, ouvrez **Réglages** :
 6. Appuyez sur **Tester la connexion** : le message « ✓ Serveur joignable » doit s'afficher.
 7. **Scanner OBD2 → Protocole** : laissez **Automatique**, ou choisissez directement **ISO 14230-4 KWP2000 (init rapide)**, le protocole confirmé sur une 407 avec le Vgate iCar Pro. La recherche automatique de l'adaptateur échoue sur cette voiture ; l'application essaie alors elle-même chaque protocole et retient celui qui répond. Selon la motorisation, la 407 utilise le CAN (ISO 15765-4) ou le KWP2000 (ISO 14230-4) ; l'application trouve le bon.
 8. **Démarrage automatique** est activé par défaut : la collecte démarre toute seule à chaque démarrage de l'appareil (démarrage complet, « démarrage rapide » des autoradios) et après chaque mise à jour, sans ouvrir l'application. Une tâche de secours, conservée par Android d'un redémarrage à l'autre, relance aussi la collecte si l'autoradio ne prévient pas les applications de son démarrage. **Ouvrez l'application une fois après l'installation** : Android ne lance pas une application jamais ouverte. Le **Journal** indique ce qui a démarré la collecte (« Démarrage automatique : démarrage de l'appareil »).
+   Si l'autoradio bloque ce démarrage (rien dans le Journal après l'allumage), une autre application qui, elle, démarre (Home Assistant, Tasker, MacroDroid) peut lancer la collecte **sans afficher l'application** en envoyant l'intention (broadcast) `com.frodrigues.obdmqtt.action.START` au paquet `com.frodrigues.obdmqtt` (`com.frodrigues.obdmqtt.action.STOP` pour arrêter). Exemple d'automatisation Home Assistant, avec l'appli compagnon installée sur l'autoradio :
+   ```yaml
+   actions:
+     - action: notify.mobile_app_<autoradio>
+       data:
+         message: command_broadcast_intent
+         data:
+           intent_package_name: com.frodrigues.obdmqtt
+           intent_action: com.frodrigues.obdmqtt.action.START
+   ```
 9. **Lire seulement moteur tournant** est désactivé par défaut : l'application se connecte dès que l'appareil démarre, contact mis. Activez-le seulement si l'appareil reste allumé voiture garée (voir « Batterie »).
 10. *Facultatif* — **Jeton d'accès Home Assistant** : uniquement pour pouvoir effacer les défauts depuis Home Assistant (voir « Diagnostic »).
 
@@ -46,6 +56,7 @@ La configuration est un *package* Home Assistant : un fichier autonome, qui n'en
    ```
    Si une ligne `homeassistant:` existe déjà, ajoutez seulement `packages: …` en dessous.
 2. Dans l'application : **Réglages → Webhook HTTPS → 1. Copier la configuration Home Assistant**.
+   Le bouton n'est actif qu'après une première connexion à la voiture : la configuration ne contient que les mesures trouvées par la recherche des PIDs.
 3. Créez le fichier `/config/packages/peugeot_407.yaml` (et le dossier `packages` s'il n'existe pas), collez le texte et enregistrez.
 4. **Paramètres → Système → Redémarrer** Home Assistant.
 
@@ -63,7 +74,21 @@ Vous obtenez :
 2. Dans Home Assistant : **Paramètres → Tableaux de bord → Ajouter un tableau de bord → Nouveau tableau de bord à partir de zéro**, nommez-le « Peugeot 407 ».
 3. Ouvrez-le, puis **⋮ → Modifier le tableau de bord → ⋮ → Éditeur de configuration brute**, remplacez tout par le texte copié et enregistrez.
 
-Vous obtenez des jauges (régime, vitesse, température moteur, batterie, charge, papillon…), un bloc **Diagnostic moteur** (voyant, codes défaut avec leur description, bouton d'effacement si un jeton est configuré), des courbes sur la dernière heure et la liste de toutes les mesures. Les cartes se modifient ensuite librement depuis l'éditeur visuel.
+Le tableau de bord a un onglet par thème (seules les mesures gérées par la voiture apparaissent) :
+
+| Onglet | Contenu |
+|---|---|
+| **Aperçu** | Vitesse, régime, température moteur, batterie, carburant, voyant moteur |
+| **Conduite** | Grandes jauges vitesse et régime ; papillon, charge, pédale, admission, avance, débit d'air, couple ; courbes sur 15 min ; records du jour |
+| **Moteur** | Températures, pressions, correction de richesse, sondes lambda, autres données techniques |
+| **Batterie** | Tension, courbe sur 24 h, minimum et maximum du jour |
+| **Diagnostic** | Voyant, codes défaut détaillés, tests antipollution, bouton d'effacement, compteurs depuis l'effacement |
+| **Historique** | Courbes sur 24 h, records de la semaine |
+| **Toutes les mesures** | La liste complète |
+
+### Version avancée (jauges modernes)
+
+Le bouton **2 bis. Copier le tableau de bord avancé (HACS)** produit le même tableau de bord avec des cartes plus jolies : jauges rondes avec aiguille et zones colorées dégradées, et courbes lissées et remplies. Il faut d'abord installer, dans **HACS** (rubrique *Interface* / *Frontend*), les cartes **Modern Circular Gauge** et **mini-graph-card**, puis recharger la page. La partie Diagnostic reste en cartes standard.
 
 > Si vous renommez un capteur dans Home Assistant, son `entity_id` ne change pas, et le tableau de bord continue de fonctionner.
 

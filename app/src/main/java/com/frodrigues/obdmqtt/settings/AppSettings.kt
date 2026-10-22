@@ -217,9 +217,10 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { block(it) }
     }
 
+    /** Status PIDs saved by older versions are dropped here, so they disappear without a rescan. */
     private fun parsePidHexSet(raw: String): Set<Int> =
         if (raw.isBlank()) emptySet()
-        else raw.split(",").mapNotNull { it.trim().toIntOrNull(16) }.toSet()
+        else raw.split(",").mapNotNull { it.trim().toIntOrNull(16) }.toSet() - PidRegistry.STATUS_PIDS
 
     private fun Set<Int>.toPidHexString(): String =
         joinToString(",") { it.toString(16).uppercase() }

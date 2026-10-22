@@ -54,7 +54,7 @@ class PidScanner(
     }
 
     private suspend fun save(pids: Set<Int>): Set<Int> {
-        val supported = pids.toMutableSet()
+        val supported = (pids - PidRegistry.STATUS_PIDS).toMutableSet()
         // Battery voltage read by the adapter itself — available on any car
         if (PidParser.parse(PidRegistry.ADAPTER_VOLTAGE, executor.sendCommand("ATRV")) != null) {
             supported.add(PidRegistry.ADAPTER_VOLTAGE)
