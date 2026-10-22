@@ -3,11 +3,22 @@ package com.frodrigues.obdmqtt.webhook
 import com.frodrigues.obdmqtt.obd.PidRegistry
 import com.frodrigues.obdmqtt.settings.AppConfig
 
+/** STANDARD uses built-in cards only; HACS uses nicer community cards (installed via HACS). */
+enum class DashboardStyle { STANDARD, HACS }
+
 /**
  * Generates a Lovelace dashboard (raw configuration editor YAML) for the sensors
  * created by [HaWebhookYaml], with entity IDs from [HaEntities].
  */
 object HaDashboardYaml {
+
+    /** HACS frontend cards used by [DashboardStyle.HACS]. */
+    val HACS_CARDS = listOf(
+        "Modern Circular Gauge (selvalt7/modern-circular-gauge)",
+        "mini-graph-card (kalkih/mini-graph-card)"
+    )
+
+    private val SEVERITY_HEX = mapOf("green" to "#4caf50", "yellow" to "#ffc107", "red" to "#f44336")
 
     /** [severity]: colour → value from which it applies, as HA's gauge card expects. */
     private data class Gauge(
@@ -37,9 +48,15 @@ object HaDashboardYaml {
 
     fun entityId(config: AppConfig, pid: Int): String = HaEntities(config).pidEntityId(pid)
 
-    fun generate(config: AppConfig, pids: Set<Int>): String = buildString {
+    fun generate(config: AppConfig, pids: Set<Int>, style: DashboardStyle = DashboardStyle.STANDARD): String = buildString {
         val ha = HaEntities(config)
+        val hacs = style == DashboardStyle.HACS
         appendLine("# Tableau de bord ${config.deviceName}")
+        if (hacs) {
+            appendLine("# Version avancée : installez d'abord ces cartes dans HACS (Interface / Frontend),")
+            appendLine("# puis rechargez la page :")
+            HACS_CARDS.forEach { appendLine("#   - $it") }
+        }
         appendLine("# Paramètres → Tableaux de bord → Ajouter → Nouveau tableau de bord,")
         appendLine("# puis ⋮ → Modifier → ⋮ → Éditeur de configuration brute, et coller ce contenu.")
         appendLine("title: ${q(config.deviceName)}")
@@ -50,7 +67,8 @@ object HaDashboardYaml {
         appendLine("    cards:")
 
         val gauges = GAUGES.filter { it.pid in pids }
-        if (gauges.isNotEmpty()) {
+        if (gauges.isNotEmpty() && hacs) appendModernGauges(config, gauges)
+        if (gauges.isNotEmpty() && !hacs) {
             appendLine("      - type: grid")
             appendLine("        columns: 2")
             appendLine("        square: false")
@@ -74,6 +92,10 @@ object HaDashboardYaml {
         HISTORY_GROUPS.forEach { (title, group) ->
             val present = group.filter { it in pids }
             if (present.isEmpty()) return@forEach
+            if (hacs) {
+                appendMiniGraph(config, title, present)
+                return@forEach
+            }
             appendLine("      - type: history-graph")
             appendLine("        title: ${q(title)}")
             appendLine("        hours_to_show: 1")
@@ -90,6 +112,52 @@ object HaDashboardYaml {
                 appendLine("          - entity: ${entityId(config, pid)}")
                 appendLine("            name: ${q(PidRegistry.getOrUnknown(pid).name)}")
             }
+        }
+    }
+
+    /** Circular gauges with needle and smooth coloured segments (3 per row, landscape screens). */
+    private fun StringBuilder.appendModernGauges(config: AppConfig, gauges: List<Gauge>) {
+        appendLine("      - type: grid")
+        appendLine("        columns: 3")
+        appendLine("        square: false")
+        appendLine("        cards:")
+        gauges.forEach { g ->
+            appendLine("          - type: custom:modern-circular-gauge")
+            appendLine("            entity: ${entityId(config, g.pid)}")
+            appendLine("            name: ${q(g.title)}")
+            appendLine("            min: ${g.min}")
+            appendLine("            max: ${g.max}")
+            appendLine("            needle: true")
+            if (g.severity.isNotEmpty()) {
+                appendLine("            smooth_segments: true")
+                appendLine("            segments:")
+                g.severity.sortedBy { it.second.toDouble() }.forEach { (colour, from) ->
+                    appendLine("              - from: $from")
+                    appendLine("                color: ${q(SEVERITY_HEX.getValue(colour))}")
+                }
+            }
+        }
+    }
+
+    /** Smoothed, filled line graph; entities with another unit go on the secondary axis. */
+    private fun StringBuilder.appendMiniGraph(config: AppConfig, title: String, pids: List<Int>) {
+        val firstUnit = PidRegistry.getOrUnknown(pids.first()).unit
+        appendLine("      - type: custom:mini-graph-card")
+        appendLine("        name: ${q(title)}")
+        appendLine("        hours_to_show: 1")
+        appendLine("        points_per_hour: 120")
+        appendLine("        line_width: 2")
+        appendLine("        smoothing: true")
+        appendLine("        animate: true")
+        appendLine("        show:")
+        appendLine("          fill: fade")
+        appendLine("          legend: true")
+        appendLine("        entities:")
+        pids.forEach { pid ->
+            val def = PidRegistry.getOrUnknown(pid)
+            appendLine("          - entity: ${entityId(config, pid)}")
+            appendLine("            name: ${q(def.name)}")
+            if (def.unit != firstUnit) appendLine("            y_axis: secondary")
         }
     }
 

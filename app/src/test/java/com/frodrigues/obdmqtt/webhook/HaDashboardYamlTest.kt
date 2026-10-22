@@ -57,4 +57,31 @@ class HaDashboardYamlTest {
             assertEquals("sensor." + HaEntities.slugify(name), HaDashboardYaml.entityId(config, pid))
         }
     }
+
+    @Test
+    fun `hacs dashboard uses modern gauges and mini graphs`() {
+        val yaml = HaDashboardYaml.generate(
+            config, setOf(0x0C, 0x0D, 0x05, PidRegistry.ADAPTER_VOLTAGE), DashboardStyle.HACS
+        )
+        assertTrue(yaml.contains("type: custom:modern-circular-gauge"))
+        assertFalse(yaml.contains("type: gauge"))
+        assertTrue(yaml.contains("type: custom:mini-graph-card"))
+        assertFalse(yaml.contains("type: history-graph"))
+        assertTrue(yaml.contains("Modern Circular Gauge"))
+        // Battery segments sorted by threshold: red 10, yellow 11.8, green 12.4
+        val battery = yaml.substringAfter("name: \"Batterie\"")
+        assertTrue(battery.indexOf("from: 10") < battery.indexOf("from: 11.8"))
+        assertTrue(battery.indexOf("from: 11.8") < battery.indexOf("from: 12.4"))
+        // Speed (km/h) shares the "Conduite" graph with RPM: secondary axis
+        val driving = yaml.substringAfter("name: \"Conduite\"").substringBefore("- type:")
+        assertTrue(driving.contains("y_axis: secondary"))
+        // Diagnostics stay on built-in cards
+        assertTrue(yaml.contains("title: Diagnostic moteur"))
+    }
+
+    @Test
+    fun `standard dashboard needs no custom card`() {
+        val yaml = HaDashboardYaml.generate(config, setOf(0x0C, 0x0D, 0x05))
+        assertFalse(yaml.contains("custom:"))
+    }
 }

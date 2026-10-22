@@ -65,6 +65,10 @@ Vous obtenez :
 
 Vous obtenez des jauges (régime, vitesse, température moteur, batterie, charge, papillon…), un bloc **Diagnostic moteur** (voyant, codes défaut avec leur description, bouton d'effacement si un jeton est configuré), des courbes sur la dernière heure et la liste de toutes les mesures. Les cartes se modifient ensuite librement depuis l'éditeur visuel.
 
+### Version avancée (jauges modernes)
+
+Le bouton **2 bis. Copier le tableau de bord avancé (HACS)** produit le même tableau de bord avec des cartes plus jolies : jauges rondes avec aiguille et zones colorées dégradées, et courbes lissées et remplies. Il faut d'abord installer, dans **HACS** (rubrique *Interface* / *Frontend*), les cartes **Modern Circular Gauge** et **mini-graph-card**, puis recharger la page. La partie Diagnostic reste en cartes standard.
+
 > Si vous renommez un capteur dans Home Assistant, son `entity_id` ne change pas, et le tableau de bord continue de fonctionner.
 
 ## Diagnostic : défauts moteur

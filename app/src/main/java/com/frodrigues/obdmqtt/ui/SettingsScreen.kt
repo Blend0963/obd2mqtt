@@ -37,6 +37,7 @@ import com.frodrigues.obdmqtt.settings.AppConfig
 import com.frodrigues.obdmqtt.settings.AppSettings
 import com.frodrigues.obdmqtt.settings.PublishMode
 import com.frodrigues.obdmqtt.settings.syncAutoStartToDeStorage
+import com.frodrigues.obdmqtt.webhook.DashboardStyle
 import com.frodrigues.obdmqtt.webhook.HaDashboardYaml
 import com.frodrigues.obdmqtt.webhook.HaWebhookYaml
 import com.frodrigues.obdmqtt.webhook.buildWebhookUrl
@@ -448,6 +449,24 @@ fun SettingsScreen(
                     ) {
                         Text("2. Copier le tableau de bord")
                     }
+                    OutlinedButton(
+                        onClick = {
+                            copyToClipboard(
+                                context, "Tableau de bord avancé",
+                                HaDashboardYaml.generate(currentConfig(), polledPids(), DashboardStyle.HACS)
+                            )
+                        },
+                        enabled = polledPids().isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("2 bis. Copier le tableau de bord avancé (HACS)")
+                    }
+                    Text(
+                        text = "Version avancée : jauges rondes modernes et courbes lissées. Installez d'abord " +
+                               "dans HACS les cartes « Modern Circular Gauge » et « mini-graph-card ».",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 

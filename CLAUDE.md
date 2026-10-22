@@ -99,4 +99,4 @@ To add a Mode 22 PID after reverse-engineering: add an entry to `Mode22Registry.
 
 ## HA Dashboard
 
-There is no separate script: Settings → Webhook → "Copier le tableau de bord" generates a Lovelace YAML (`webhook/HaDashboardYaml.kt`) for the polled PIDs. User-facing setup guide (French): `docs/peugeot-407.md`.
+There is no separate script: Settings → Webhook → "Copier le tableau de bord" generates a Lovelace YAML (`webhook/HaDashboardYaml.kt`) for the polled PIDs. `DashboardStyle.STANDARD` uses built-in cards only; `DashboardStyle.HACS` ("tableau de bord avancé") swaps gauges for `custom:modern-circular-gauge` and history graphs for `custom:mini-graph-card` (see `HACS_CARDS`); diagnostics stay on built-in cards. User-facing setup guide (French): `docs/peugeot-407.md`.
