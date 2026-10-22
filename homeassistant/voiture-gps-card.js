@@ -18,12 +18,18 @@
  * pitch: 45                                       # inclinaison 3D (0 = vue du dessus)
  * heading_up: true                                # carte orientée dans le sens de la marche
  * follow_pause: 15                                # secondes avant de recentrer après un geste
+ * layout: coin                                   # « coin » : panneau en haut à droite, vitesse en bas
+ *                                                 # « groupe » : panneau et vitesse côte à côte en bas
+ * hide_attribution: false                         # masquer la mention OpenStreetMap / CARTO
  * style: <URL d'un style MapLibre>                # facultatif : fond de carte
  */
 
 const MAPLIBRE_VERSION = "4.7.1";
 const MAPLIBRE_URL = `https://unpkg.com/maplibre-gl@${MAPLIBRE_VERSION}/dist/maplibre-gl`;
 const DEFAULT_STYLE = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
+/** Condensed road-sign-like typeface; @font-face only works at document level, not in a shadow root. */
+const FONT_URL = "https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&display=swap";
+const FONT = "'Barlow Condensed', 'Roboto Condensed', 'Arial Narrow', sans-serif";
 
 /** No GPS fix for this long: stop extrapolating instead of driving off the road. */
 const MAX_PREDICT_S = 8;
@@ -44,6 +50,15 @@ function loadMapLibre() {
     });
   }
   return window.__voitureGpsMapLibre;
+}
+
+function loadFont() {
+  if (document.getElementById("voiture-gps-font")) return;
+  const link = document.createElement("link");
+  link.id = "voiture-gps-font";
+  link.rel = "stylesheet";
+  link.href = FONT_URL;
+  document.head.appendChild(link);
 }
 
 const toRad = (d) => (d * Math.PI) / 180;
@@ -82,6 +97,18 @@ const ARROW_SVG = `
   <path d="M20 4 L32 33 L20 26 L8 33 Z" fill="#2196f3" stroke="white" stroke-width="2.5" stroke-linejoin="round"/>
 </svg>`;
 
+/**
+ * French speed-limit sign (B14): white disc with a thin white rim, red ring of ~1/10 of the
+ * diameter, black condensed digits.
+ */
+const SIGN_SVG = `
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="50" cy="50" r="49.5" fill="#fff" stroke="rgba(0,0,0,0.35)" stroke-width="1"/>
+  <circle cx="50" cy="50" r="42.5" fill="none" stroke="#c8102e" stroke-width="11"/>
+  <text x="50" y="53" text-anchor="middle" dominant-baseline="middle" fill="#1a1a1a"
+        font-family="${FONT}" font-weight="700" font-size="44" letter-spacing="-1"></text>
+</svg>`;
+
 class VoitureGpsCard extends HTMLElement {
   setConfig(config) {
     if (!config || !config.entity) {
@@ -92,6 +119,8 @@ class VoitureGpsCard extends HTMLElement {
       pitch: 45,
       heading_up: true,
       follow_pause: 15,
+      layout: "coin",
+      hide_attribution: false,
       style: DEFAULT_STYLE,
       ...config,
     };
@@ -136,30 +165,51 @@ class VoitureGpsCard extends HTMLElement {
                           background: rgba(30,30,30,0.85); color: white; display: flex; align-items: center;
                           justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
         .buttons button[hidden] { display: none; }
-        .speed { position: absolute; left: 10px; bottom: 10px; z-index: 2; min-width: 64px; padding: 6px 12px;
-                 border-radius: 14px; background: rgba(30,30,30,0.85); color: white; text-align: center;
-                 font-weight: 700; line-height: 1; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
-        .speed .value { font-size: 30px; }
-        .speed .unit { font-size: 11px; opacity: 0.7; }
-        .limit { position: absolute; right: 10px; top: 10px; z-index: 2; width: 54px; height: 54px; border-radius: 50%;
-                 background: white; border: 7px solid #e53935; color: #111; font-size: 22px; font-weight: 800;
-                 display: flex; align-items: center; justify-content: center; box-sizing: border-box;
-                 box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
-        .limit.over { background: #e53935; color: white; animation: clignote 1s infinite; }
-        .limit[hidden] { display: none; }
-        @keyframes clignote { 50% { opacity: 0.6; } }
+        .hud { position: absolute; z-index: 2; display: flex; align-items: center; gap: 10px; pointer-events: none; }
+        .hud.speed-hud { left: 12px; bottom: 12px; }
+        .hud.sign-hud { right: 12px; top: 12px; }
+        .groupe .hud.speed-hud { bottom: 14px; left: 14px; }
+        .speed { min-width: 74px; height: 74px; padding: 0 12px; box-sizing: border-box; border-radius: 18px;
+                 background: rgba(18,18,22,0.82); backdrop-filter: blur(6px); color: #fff;
+                 display: flex; flex-direction: column; align-items: center; justify-content: center;
+                 font-family: ${FONT}; line-height: 0.9; box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+                 border: 1px solid rgba(255,255,255,0.08); transition: color 0.3s; }
+        .speed .value { font-size: 40px; font-weight: 700; letter-spacing: -0.5px; }
+        .speed .unit { font-size: 13px; font-weight: 600; opacity: 0.6; margin-top: 2px; letter-spacing: 0.5px; }
+        .speed.over { color: #ff5252; }
+        .sign { width: 78px; height: 78px; border-radius: 50%; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.5)); }
+        .sign svg { width: 100%; height: 100%; display: block; }
+        .sign.over { animation: alerte 1s ease-in-out infinite; }
+        .sign[hidden], .speed[hidden] { display: none; }
+        @keyframes alerte {
+          0%, 100% { filter: drop-shadow(0 0 0 rgba(255,40,40,0)) drop-shadow(0 4px 10px rgba(0,0,0,0.5)); transform: scale(1); }
+          50% { filter: drop-shadow(0 0 14px rgba(255,40,40,0.95)) drop-shadow(0 4px 10px rgba(0,0,0,0.5)); transform: scale(1.06); }
+        }
+        .no-attribution .maplibregl-ctrl-attrib, .no-attribution .maplibregl-ctrl-bottom-right { display: none !important; }
       </style>
-      <ha-card>
+      <ha-card id="card">
         <div id="map"></div>
         <div class="message" id="message">Chargement de la carte…</div>
         <div class="buttons">
           <button id="recenter" title="Recentrer" hidden><ha-icon icon="mdi:crosshairs-gps"></ha-icon></button>
           <button id="orientation" title="Orientation"><ha-icon icon="mdi:navigation-variant"></ha-icon></button>
         </div>
-        <div class="speed" id="speed" hidden><div class="value">0</div><div class="unit">km/h</div></div>
-        <div class="limit" id="limit" hidden></div>
+        <div class="hud speed-hud" id="speedHud">
+          <div class="speed" id="speed" hidden><div class="value">0</div><div class="unit">km/h</div></div>
+        </div>
+        <div class="hud sign-hud" id="signHud">
+          <div class="sign" id="limit" hidden>${SIGN_SVG}</div>
+        </div>
       </ha-card>`;
     this._el = (id) => root.getElementById(id);
+    loadFont();
+    const card = this._el("card");
+    card.classList.toggle("no-attribution", !!this._config.hide_attribution);
+    if (this._config.layout === "groupe") {
+      // Waze-like cluster: the sign next to the speed, bottom left
+      card.classList.add("groupe");
+      this._el("speedHud").appendChild(this._el("limit"));
+    }
     this._el("recenter").addEventListener("click", () => this._setFollow(true));
     this._el("orientation").addEventListener("click", () => {
       this._headingUp = !this._headingUp;
@@ -234,17 +284,26 @@ class VoitureGpsCard extends HTMLElement {
 
   _updateOverlays() {
     const kmh = Math.round(this._speedMps() * 3.6);
+    const limitEntity = this._config.speed_limit_entity && this._hass.states[this._config.speed_limit_entity];
+    const limit = limitEntity ? parseFloat(limitEntity.state) : NaN;
+    const over = !isNaN(limit) && kmh > limit + 3;
+
     const speedBox = this._el("speed");
     speedBox.hidden = false;
     speedBox.firstElementChild.textContent = kmh;
+    speedBox.classList.toggle("over", over);
 
-    const limitBox = this._el("limit");
-    const limitEntity = this._config.speed_limit_entity && this._hass.states[this._config.speed_limit_entity];
-    const limit = limitEntity ? parseFloat(limitEntity.state) : NaN;
-    limitBox.hidden = isNaN(limit);
+    const sign = this._el("limit");
+    sign.hidden = isNaN(limit);
     if (!isNaN(limit)) {
-      limitBox.textContent = Math.round(limit);
-      limitBox.classList.toggle("over", kmh > limit + 3);
+      const text = sign.querySelector("text");
+      const digits = String(Math.round(limit));
+      if (text.textContent !== digits) {
+        text.textContent = digits;
+        text.setAttribute("font-size", digits.length > 2 ? "39" : "46");
+        text.setAttribute("letter-spacing", digits.length > 2 ? "-2" : "-1");
+      }
+      sign.classList.toggle("over", over);
     }
   }
 
@@ -271,7 +330,7 @@ class VoitureGpsCard extends HTMLElement {
       zoom: this._config.zoom,
       pitch: this._config.pitch,
       bearing: this._headingUp ? this._heading : 0,
-      attributionControl: { compact: true },
+      attributionControl: this._config.hide_attribution ? false : { compact: true },
     });
     this._map = map;
 
