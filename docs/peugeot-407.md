@@ -93,6 +93,21 @@ Le bouton **2 bis. Copier le tableau de bord avancé (HACS)** produit le même t
 
 > Si vous renommez un capteur dans Home Assistant, son `entity_id` ne change pas, et le tableau de bord continue de fonctionner.
 
+### Carte GPS « Voiture GPS »
+
+`homeassistant/voiture-gps-card.js` est une carte de navigation pour le tableau de bord : flèche orientée dans le sens de la marche, carte qui tourne avec la route, mouvement fluide entre deux positions GPS (la position est prolongée avec la vitesse OBD), trace du trajet, vitesse et panneau de limitation. Elle a besoin d'internet (fond de carte CARTO / OpenStreetMap, bibliothèque MapLibre).
+
+1. Copiez le fichier dans `/config/www/voiture-gps-card.js`.
+2. **Paramètres → Tableaux de bord → ⋮ → Ressources → Ajouter une ressource** : URL `/local/voiture-gps-card.js`, type **Module JavaScript**.
+3. Dans l'appli Home Assistant de l'autoradio, activez le **mode haute précision** de la localisation (mise à jour toutes les 5 s).
+4. Ajoutez la carte :
+   ```yaml
+   type: custom:voiture-gps-card
+   entity: device_tracker.<autoradio>
+   speed_entity: sensor.peugeot_407_vitesse
+   speed_limit_entity: sensor.vitesse_limite   # facultatif
+   ```
+
 ## Diagnostic : défauts moteur
 
 L'application lit au démarrage puis chaque minute :

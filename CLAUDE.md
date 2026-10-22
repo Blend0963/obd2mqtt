@@ -100,3 +100,5 @@ To add a Mode 22 PID after reverse-engineering: add an entry to `Mode22Registry.
 ## HA Dashboard
 
 There is no separate script: Settings → Webhook → "Copier le tableau de bord" generates a Lovelace YAML (`webhook/HaDashboardYaml.kt`) for the polled PIDs. The dashboard has one view per theme (`VIEWS`: Aperçu, Conduite, Moteur, Batterie, Diagnostic, Historique, plus Toutes les mesures); cards and views without supported PIDs are left out. Gauge ranges/colour segments live in `GAUGES`. `DashboardStyle.STANDARD` uses built-in cards only; `DashboardStyle.HACS` ("tableau de bord avancé") swaps gauges for `custom:modern-circular-gauge` and history graphs for `custom:mini-graph-card` (see `HACS_CARDS`); diagnostics stay on built-in cards. User-facing setup guide (French): `docs/peugeot-407.md`.
+
+`homeassistant/voiture-gps-card.js` is a standalone Lovelace card (plain JS, MapLibre GL from unpkg, CARTO dark style): heading-up navigation map that follows a `device_tracker`, extrapolates between GPS fixes with the OBD speed (`speed_entity`), draws the trail and an optional speed-limit sign. Not part of the APK.
