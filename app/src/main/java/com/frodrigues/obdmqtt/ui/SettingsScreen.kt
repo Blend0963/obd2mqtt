@@ -447,7 +447,7 @@ fun SettingsScreen(
                         enabled = polledPids().isNotEmpty(),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("2. Copier le tableau de bord")
+                        Text("2. Copier le tableau de bord (7 onglets)")
                     }
                     OutlinedButton(
                         onClick = {
@@ -459,7 +459,7 @@ fun SettingsScreen(
                         enabled = polledPids().isNotEmpty(),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("2 bis. Copier le tableau de bord avancé (HACS)")
+                        Text("2 bis. Copier le tableau de bord avancé (HACS, 7 onglets)")
                     }
                     Text(
                         text = "Version avancée : jauges rondes modernes et courbes lissées. Installez d'abord " +

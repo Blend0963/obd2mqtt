@@ -63,7 +63,17 @@ Vous obtenez :
 2. Dans Home Assistant : **Paramètres → Tableaux de bord → Ajouter un tableau de bord → Nouveau tableau de bord à partir de zéro**, nommez-le « Peugeot 407 ».
 3. Ouvrez-le, puis **⋮ → Modifier le tableau de bord → ⋮ → Éditeur de configuration brute**, remplacez tout par le texte copié et enregistrez.
 
-Vous obtenez des jauges (régime, vitesse, température moteur, batterie, charge, papillon…), un bloc **Diagnostic moteur** (voyant, codes défaut avec leur description, bouton d'effacement si un jeton est configuré), des courbes sur la dernière heure et la liste de toutes les mesures. Les cartes se modifient ensuite librement depuis l'éditeur visuel.
+Le tableau de bord a un onglet par thème (seules les mesures gérées par la voiture apparaissent) :
+
+| Onglet | Contenu |
+|---|---|
+| **Aperçu** | Vitesse, régime, température moteur, batterie, carburant, voyant moteur |
+| **Conduite** | Grandes jauges vitesse et régime ; papillon, charge, pédale, admission, avance, débit d'air, couple ; courbes sur 15 min ; records du jour |
+| **Moteur** | Températures, pressions, correction de richesse, sondes lambda, autres données techniques |
+| **Batterie** | Tension, courbe sur 24 h, minimum et maximum du jour |
+| **Diagnostic** | Voyant, codes défaut détaillés, tests antipollution, bouton d'effacement, compteurs depuis l'effacement |
+| **Historique** | Courbes sur 24 h, records de la semaine |
+| **Toutes les mesures** | La liste complète |
 
 ### Version avancée (jauges modernes)
 

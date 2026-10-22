@@ -42,9 +42,9 @@ class HaDashboardYamlTest {
         assertFalse(yaml.contains("sensor.peugeot_407_vitesse"))
         assertTrue(yaml.contains("type: gauge"))
         assertTrue(yaml.contains("type: history-graph"))
-        assertTrue(yaml.contains("title: Toutes les mesures"))
-        assertTrue(yaml.contains("              yellow: 4500"))
-        assertTrue(yaml.contains("path: peugeot-407"))
+        assertTrue(yaml.contains("title: \"Toutes les mesures\""))
+        assertTrue(yaml.contains("              - from: 4500"))
+        assertTrue(yaml.contains("path: apercu"))
     }
 
     @Test
@@ -83,5 +83,27 @@ class HaDashboardYamlTest {
     fun `standard dashboard needs no custom card`() {
         val yaml = HaDashboardYaml.generate(config, setOf(0x0C, 0x0D, 0x05))
         assertFalse(yaml.contains("custom:"))
+    }
+
+    @Test
+    fun `one view per theme, empty views left out`() {
+        val yaml = HaDashboardYaml.generate(config, setOf(0x0C, 0x0D, 0x05, 0x06, 0x0B))
+        listOf("Aperçu", "Conduite", "Moteur", "Diagnostic", "Historique", "Toutes les mesures").forEach {
+            assertTrue(it, yaml.contains("  - title: \"$it\""))
+        }
+        // No voltage PID: no battery view
+        assertFalse(yaml.contains("  - title: \"Batterie\""))
+        assertTrue(yaml.contains("type: statistic"))
+        assertTrue(yaml.contains("stat_type: max"))
+        assertTrue(yaml.contains("title: \"Correction de richesse\""))
+    }
+
+    @Test
+    fun `cards without supported pids are left out`() {
+        val yaml = HaDashboardYaml.generate(config, setOf(0x0C))
+        assertFalse(yaml.contains("Températures"))
+        assertFalse(yaml.contains("Pressions"))
+        // Diagnostic view is always there
+        assertTrue(yaml.contains("  - title: \"Diagnostic\""))
     }
 }
