@@ -23,6 +23,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val serverStatus: StateFlow<ConnectionStatus> = OBDCollectorService.serverStatus
     val pidReadings: StateFlow<Map<Int, Double>> = OBDCollectorService.pidReadings
     val obdProtocolLabel: StateFlow<String> = OBDCollectorService.obdProtocolLabel
+    val cycleMs: StateFlow<Long> = OBDCollectorService.cycleMs
     val statusText: StateFlow<String> = OBDCollectorService.statusText
     val diagnostics: StateFlow<DiagnosticReport?> = OBDCollectorService.diagnostics
     val clearResult: StateFlow<ClearResult?> = OBDCollectorService.clearResult

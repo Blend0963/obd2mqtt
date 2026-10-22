@@ -36,6 +36,7 @@ fun MainScreen(
     val publishMode by viewModel.settings.publishMode.collectAsState(initial = PublishMode.WEBHOOK)
     val pidReadings by viewModel.pidReadings.collectAsState()
     val obdProtocol by viewModel.obdProtocolLabel.collectAsState()
+    val cycleMs by viewModel.cycleMs.collectAsState()
     val statusText by viewModel.statusText.collectAsState()
     val diagnostics by viewModel.diagnostics.collectAsState()
     val engineOffVoltage by viewModel.engineOffVoltage.collectAsState()
@@ -227,7 +228,8 @@ fun MainScreen(
                         }
                         if (lastUpdate > 0L) {
                             Text(
-                                text = "Mis à jour à ${SimpleDateFormat("HH:mm:ss", Locale.FRANCE).format(Date(lastUpdate))}",
+                                text = "Mis à jour à ${SimpleDateFormat("HH:mm:ss", Locale.FRANCE).format(Date(lastUpdate))}" +
+                                       if (cycleMs > 0L) " · rapides toutes les $cycleMs ms" else "",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

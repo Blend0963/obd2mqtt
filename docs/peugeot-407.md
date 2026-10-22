@@ -24,7 +24,7 @@ Dans l'application, ouvrez **Réglages** :
 2. **Connexion à Home Assistant** : laissez **Webhook HTTPS**.
 3. **URL de Home Assistant** : votre adresse externe, par exemple `https://maison.exemple.fr`.
 4. **ID du webhook** : il est généré automatiquement. C'est le seul secret, ne le partagez pas.
-5. **Intervalle d'envoi** : 1 seconde pour du temps réel.
+5. **Intervalle d'envoi minimum** : 0,3 seconde par défaut. Les nouvelles valeurs partent dès que ce délai est écoulé ; augmentez-le pour consommer moins de données mobiles (environ 10 à 15 Mo par heure de route à 0,3 s).
 6. Appuyez sur **Tester la connexion** : le message « ✓ Serveur joignable » doit s'afficher.
 7. **Scanner OBD2 → Protocole** : laissez **Automatique**, ou choisissez directement **ISO 14230-4 KWP2000 (init rapide)**, le protocole confirmé sur une 407 avec le Vgate iCar Pro. La recherche automatique de l'adaptateur échoue sur cette voiture ; l'application essaie alors elle-même chaque protocole et retient celui qui répond. Selon la motorisation, la 407 utilise le CAN (ISO 15765-4) ou le KWP2000 (ISO 14230-4) ; l'application trouve le bon.
 8. **Démarrage automatique** est activé par défaut : la collecte démarre toute seule à chaque démarrage de l'appareil (démarrage complet, « démarrage rapide » des autoradios) et après chaque mise à jour, sans ouvrir l'application. Une tâche de secours, conservée par Android d'un redémarrage à l'autre, relance aussi la collecte si l'autoradio ne prévient pas les applications de son démarrage. **Ouvrez l'application une fois après l'installation** : Android ne lance pas une application jamais ouverte. Le **Journal** indique ce qui a démarré la collecte (« Démarrage automatique : démarrage de l'appareil »).
@@ -125,7 +125,7 @@ Les calculateurs (dont le BSI) peuvent ainsi se mettre en veille normalement voi
 
 **Réglages → Sélection des PIDs** :
 
-- **Rapide** : lu chaque seconde (10 maximum). Par défaut : régime, vitesse, charge, papillon, température moteur, pression d'admission, débit d'air et tension batterie, s'ils sont gérés par la voiture.
+- **Rapide** : lus l'un après l'autre, en continu (10 maximum). La 407 répond en environ 80 ms par mesure : avec 6 rapides, chacune est rafraîchie environ toutes les 0,5 s ; moins il y en a, plus c'est rapide. L'écran principal affiche le temps réel (« rapides toutes les … ms »). Par défaut : régime, vitesse, charge, papillon, température moteur, pression d'admission, débit d'air et tension batterie, s'ils sont gérés par la voiture.
 - **Lent** : lu toutes les 10 secondes. Par défaut, **toutes les autres mesures détectées**.
 - **Off** : ni lu ni envoyé.
 
