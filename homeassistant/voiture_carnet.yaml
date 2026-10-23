@@ -337,6 +337,30 @@ template:
           plus_long_trajet: "{{ [this.attributes.get('plus_long_trajet') or 0, trigger.event.data.distance_km or 0] | max }}"
           meilleur_score_eco: "{{ [this.attributes.get('meilleur_score_eco') or 0, trigger.event.data.eco_score or 0] | max }}"
 
+  # Titre en cours lu dans la notification du lecteur (Deezer, Spotify…) : le capteur
+  # media session de l'appli compagnon reste vide sur l'autoradio. On ne garde que
+  # les notifications de lecture (MediaStyle), les autres ne l'effacent pas.
+  - triggers:
+      - trigger: state
+        entity_id: sensor.mycar_last_notification
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ trigger.to_state is not none
+             and 'MediaStyle' in (trigger.to_state.attributes.get('android.template') or '') }}
+    sensor:
+      - name: Voiture musique
+        unique_id: voiture_musique
+        icon: mdi:music
+        state: >-
+          {% set t = trigger.to_state.attributes.get('android.title') %}
+          {{ (t if t not in [none, 'null', ''] else 'Inconnu') | string | truncate(250) }}
+        attributes:
+          artiste: >-
+            {% set a = trigger.to_state.attributes.get('android.text') %}
+            {{ a if a not in [none, 'null'] else '' }}
+          appli: "{{ trigger.to_state.attributes.get('package', '') }}"
+
 # Entités créées : sensor.voiture_km_cette_semaine, sensor.voiture_km_ce_mois,
 # sensor.voiture_carburant_ce_mois (Home Assistant les nomme d'après « name »)
 utility_meter:
