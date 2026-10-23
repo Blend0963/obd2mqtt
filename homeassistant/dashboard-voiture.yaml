@@ -133,7 +133,7 @@ views:
             grid_options:
               columns: 12
           - type: custom:voiture-gps-card
-            entity: device_tracker.mycar
+            entity: device_tracker.peugeot_407
             speed_entity: sensor.peugeot_407_vitesse
             layout: coin
             hide_attribution: true
