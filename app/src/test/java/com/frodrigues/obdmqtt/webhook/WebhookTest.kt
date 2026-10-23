@@ -2,6 +2,7 @@ package com.frodrigues.obdmqtt.webhook
 
 import com.frodrigues.obdmqtt.settings.AppConfig
 import com.frodrigues.obdmqtt.settings.PublishMode
+import com.frodrigues.obdmqtt.trip.Trip
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -101,5 +102,25 @@ class WebhookTest {
         assertTrue(yaml.contains("state_class: total_increasing"))
         // sensors are emitted in PID order
         assertTrue(yaml.indexOf("_0C\"") < yaml.indexOf("_0D\""))
+    }
+
+    @Test
+    fun `trip is sent with the readings and declared in the yaml`() {
+        val trip = Trip(
+            id = 1_000L, active = true, startMs = 1_000L, endMs = 601_000L, distanceKm = 5.234,
+            drivingSeconds = 540.0, idleSeconds = 60.0, maxSpeedKmh = 72.0, maxRpm = 3100.0, maxCoolantC = 88.0,
+            fuelLitres = 0.31, harshAccelerations = 1, harshBrakings = 0, overRevs = 0, coldOverRevs = 0,
+            crankVoltage = 10.4, zeroTo100Seconds = null, eightyTo120Seconds = null, fuelRateLh = 2.1, fuelL100 = 4.2,
+        )
+        val json = WebhookPayload.readings(mapOf(0x0D to 50.0), "Car", 5L, trip = trip)
+        assertTrue(json.contains("\"trip\":{\"id\":1000,\"active\":true"))
+        assertTrue(json.contains("\"distance_km\":5.23"))
+        assertTrue(json.contains("\"duration_min\":10"))
+        assertTrue(json.contains("\"crank_v\":10.4"))
+        assertTrue(json.contains("\"t0_100\":null"))
+
+        val yaml = HaWebhookYaml.generate(config, setOf(0x0D))
+        assertTrue(yaml.contains("name: \"Test \\\"Car\\\" Trajet\""))
+        assertTrue(yaml.contains("trigger.json.trip.fuel_lh"))
     }
 }

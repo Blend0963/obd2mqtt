@@ -1,0 +1,24 @@
+# À coller dans /config/packages/peugeot_407.yaml, dans la liste « sensor: » du bloc webhook
+# (par exemple juste avant « binary_sensor: »), avec la même indentation que les autres capteurs.
+# Remplacez « car » par la partie de vos unique_id existants si elle est différente (obd2_XXXX_…).
+      - name: "Peugeot 407 Trajet"
+        unique_id: "obd2_car_trip"
+        icon: mdi:map-marker-path
+        unit_of_measurement: "km"
+        state: "{{ trigger.json.trip.distance_km if trigger.json.trip is mapping else this.state | float(none) }}"
+        attributes:
+          trajet: "{{ trigger.json.trip if trigger.json.trip is mapping else this.attributes.get('trajet') }}"
+      - name: "Peugeot 407 Consommation instantanée"
+        unique_id: "obd2_car_fuel_lh"
+        icon: mdi:gas-station
+        unit_of_measurement: "L/h"
+        state_class: measurement
+        availability: "{{ trigger.json.available | default(false) and trigger.json.trip is mapping and trigger.json.trip.fuel_lh is not none }}"
+        state: "{{ trigger.json.trip.fuel_lh }}"
+      - name: "Peugeot 407 Consommation aux 100"
+        unique_id: "obd2_car_fuel_l100_now"
+        icon: mdi:gas-station
+        unit_of_measurement: "L/100km"
+        state_class: measurement
+        availability: "{{ trigger.json.available | default(false) and trigger.json.trip is mapping and trigger.json.trip.fuel_l100_now is not none }}"
+        state: "{{ trigger.json.trip.fuel_l100_now }}"

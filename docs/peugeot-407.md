@@ -93,6 +93,34 @@ Le bouton **2 bis. Copier le tableau de bord avancé (HACS)** produit le même t
 
 > Si vous renommez un capteur dans Home Assistant, son `entity_id` ne change pas, et le tableau de bord continue de fonctionner.
 
+### Carte GPS « Voiture GPS »
+
+`homeassistant/voiture-gps-card.js` est une carte de navigation pour le tableau de bord : flèche orientée dans le sens de la marche, carte qui tourne avec la route, mouvement fluide entre deux positions GPS (la position est prolongée avec la vitesse OBD), trace du trajet, vitesse et panneau de limitation. Elle a besoin d'internet (fond de carte CARTO / OpenStreetMap, bibliothèque MapLibre).
+
+1. Copiez le fichier dans `/config/www/voiture-gps-card.js`.
+2. **Paramètres → Tableaux de bord → ⋮ → Ressources → Ajouter une ressource** : URL `/local/voiture-gps-card.js`, type **Module JavaScript**.
+3. Dans l'appli Home Assistant de l'autoradio, activez le **mode haute précision** de la localisation (mise à jour toutes les 5 s).
+4. Ajoutez la carte :
+   ```yaml
+   type: custom:voiture-gps-card
+   entity: device_tracker.<autoradio>
+   speed_entity: sensor.peugeot_407_vitesse
+   speed_limit_entity: sensor.vitesse_limite   # facultatif
+   ```
+
+## Carnet de bord : trajets, entretien, consommation, alertes
+
+Depuis la v1.0.10, l'application suit chaque **trajet** (démarrage → arrêt du moteur) : distance, durée, vitesses, ralenti, carburant estimé, score d'éco-conduite (accélérations et freinages brusques, surrégimes, moteur froid sollicité), chronos 0-100 et 80-120 km/h, et la **tension de la batterie au démarrage** (chute pendant que le démarreur tourne : moins de 10 V = batterie fatiguée). Le trajet part dans le webhook (`"trip"`) ; Home Assistant l'enregistre quand l'appli le déclare fini ou quand il ne bouge plus depuis 3 minutes (autoradio éteint avec le contact).
+
+La **consommation** est estimée à partir du débit d'air (et de la sonde lambda) : environ ±15 %. Après chaque plein « à ras », saisissez les litres et appuyez sur « Enregistrer le plein » : Home Assistant compare avec l'estimation et corrige la consommation affichée.
+
+Fichiers dans `homeassistant/` :
+1. `peugeot_407-ajout-trajet.yaml` : trois capteurs à ajouter au paquet du webhook (inutile si vous recopiez la configuration depuis l'application).
+2. `voiture_carnet.yaml` : à copier dans `/config/packages/` (kilométrage, entretien — vidange tous les 10 000 km ou 1 an —, filtres, distribution, contrôle technique, carburant et coûts, historique, records, alertes moteur / turbo / alternateur / batterie, annonces vocales sur l'autoradio). Adaptez `notify.mobile_app_mycar` et `notify.notify` en tête du fichier, puis redémarrez Home Assistant.
+3. `carnet-dashboard.yaml` : la vue « Carnet » à coller dans le tableau de bord.
+
+Au premier lancement, recalez le **kilométrage** sur le compteur de la voiture et renseignez les kilométrages des derniers entretiens et la date du prochain contrôle technique.
+
 ## Diagnostic : défauts moteur
 
 L'application lit au démarrage puis chaque minute :
