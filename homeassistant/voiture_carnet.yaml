@@ -166,6 +166,27 @@ template:
           {{ v < 1000 or (ct | is_number and ct | int < 30) }}
 
   - sensor:
+      # Turbo et rampe en bar (remplacent l'ancien voiture_calculs.yaml : mêmes identifiants,
+      # donc mêmes entités sensor.pression_turbo et sensor.pression_rampe)
+      - name: Pression turbo
+        unique_id: voiture_pression_turbo
+        unit_of_measurement: bar
+        device_class: pressure
+        state_class: measurement
+        icon: mdi:turbine
+        availability: "{{ has_value('sensor.peugeot_407_pression_collecteur_admission') }}"
+        state: >-
+          {{ ((states('sensor.peugeot_407_pression_collecteur_admission') | float(0) - 101.3) / 100) | round(2) }}
+      - name: Pression rampe
+        unique_id: voiture_pression_rampe
+        unit_of_measurement: bar
+        device_class: pressure
+        state_class: measurement
+        icon: mdi:needle
+        availability: "{{ has_value('sensor.peugeot_407_pression_rampe_injection') }}"
+        state: >-
+          {{ (states('sensor.peugeot_407_pression_rampe_injection') | float(0) / 100) | round(0) }}
+
       - name: Voiture kilométrage
         unique_id: voiture_kilometrage
         unit_of_measurement: km

@@ -543,7 +543,7 @@ views:
                 name: Turbo
                 y_axis: secondary
           - type: custom:mini-graph-card
-            name: Consommation
+            name: "Consommation (L/h, aussi à l'arrêt)"
             hours_to_show: 0.25
             points_per_hour: 120
             height: 100
@@ -553,8 +553,8 @@ views:
               fill: fade
               legend: false
             entities:
-              - entity: sensor.voiture_consommation_aux_100
-                name: L/100
+              - entity: sensor.voiture_consommation_instantanee
+                name: L/h
       - type: grid
         cards:
           - type: heading
