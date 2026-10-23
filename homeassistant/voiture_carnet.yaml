@@ -159,13 +159,29 @@ input_select:
 template:
   # Pour afficher ou cacher les pastilles de l'Aperçu
   - binary_sensor:
+      # L'appli envoie les mesures plusieurs fois par seconde tant que l'autoradio a du réseau.
+      # Sans réseau (garage, parking souterrain) rien n'arrive, même pas le « moteur coupé » :
+      # 2 min sans données = voiture hors ligne, donc arrêtée. last_reported avance à chaque
+      # envoi, même quand la valeur ne change pas.
+      - name: Voiture en ligne
+        unique_id: voiture_en_ligne
+        device_class: connectivity
+        state: >-
+          {% set ns = namespace(recent=false) %}
+          {% for e in ['sensor.peugeot_407_tension_batterie', 'sensor.peugeot_407_trajet'] %}
+            {% set s = states[e] %}
+            {% if s is not none and s.state not in ['unavailable', 'unknown']
+                  and (now() - s.last_reported).total_seconds() < 120 %}
+              {% set ns.recent = true %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.recent }}
       - name: Voiture trajet en cours
         unique_id: voiture_trajet_en_cours
         icon: mdi:map-marker-path
         state: >-
           {% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}
-          {{ t is mapping and t.active
-             and (now() - states.sensor.peugeot_407_trajet.last_updated).total_seconds() < 180 }}
+          {{ t is mapping and t.active and is_state('binary_sensor.voiture_en_ligne', 'on') }}
       - name: Voiture entretien à prévoir
         unique_id: voiture_entretien_a_prevoir
         icon: mdi:wrench-clock
@@ -535,7 +551,7 @@ automation:
         value_template: >-
           {% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}
           {{ t is mapping and t.id | string != states('input_text.voiture_dernier_trajet_id')
-             and (not t.active or (now() - states.sensor.peugeot_407_trajet.last_updated).total_seconds() > 180)
+             and (not t.active or is_state('binary_sensor.voiture_en_ligne', 'off'))
              and ((t.distance_km or 0) >= 0.3 or (t.duration_min or 0) >= 2) }}
     actions:
       - variables:

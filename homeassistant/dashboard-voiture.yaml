@@ -13,8 +13,8 @@ views:
         chips:
           - type: conditional
             conditions:
-              - entity: sensor.peugeot_407_tension_batterie
-                state: unavailable
+              - entity: binary_sensor.voiture_en_ligne
+                state: 'off'
             chip:
               type: template
               icon: mdi:access-point-off
@@ -22,8 +22,8 @@ views:
               content: Hors ligne
           - type: template
             icon: mdi:engine
-            icon_color: '{{ ''green'' if states(''sensor.peugeot_407_regime_moteur'') | float(0) > 300 else ''grey'' }}'
-            content: '{% set r = states(''sensor.peugeot_407_regime_moteur'') | float(0) %}{{ (r | int) ~ '' tr/min'' if r > 300 else ''Arrêté'' }}'
+            icon_color: '{{ ''green'' if is_state(''binary_sensor.voiture_en_ligne'', ''on'') and states(''sensor.peugeot_407_regime_moteur'') | float(0) > 300 else ''grey'' }}'
+            content: '{% set r = states(''sensor.peugeot_407_regime_moteur'') | float(0) if is_state(''binary_sensor.voiture_en_ligne'', ''on'') else 0 %}{{ (r | int) ~ '' tr/min'' if r > 300 else ''Arrêté'' }}'
           - type: template
             icon: mdi:car-wrench
             icon_color: '{{ ''red'' if is_state(''binary_sensor.peugeot_407_voyant_moteur'', ''on'') or not is_state(''sensor.peugeot_407_codes_defaut'', ''Aucun'') else ''green'' }}'
@@ -33,8 +33,9 @@ views:
               navigation_path: diagnostic
           - type: conditional
             conditions:
-              - entity: sensor.peugeot_407_temperature_liquide_de_refroidissement
-                state_not: unavailable
+              - &id001
+                entity: binary_sensor.voiture_en_ligne
+                state: 'on'
             chip:
               type: template
               icon: mdi:thermometer
@@ -42,8 +43,7 @@ views:
               content: '{% set t = states(''sensor.peugeot_407_temperature_liquide_de_refroidissement'') | float(0) %}{{ t | int }} °C{{ '' · Surchauffe !'' if t >= 105 else '''' }}'
           - type: conditional
             conditions:
-              - entity: sensor.peugeot_407_tension_batterie
-                state_not: unavailable
+              - *id001
             chip:
               type: template
               icon: mdi:car-battery
@@ -63,6 +63,8 @@ views:
                 navigation_path: carnet
           - type: conditional
             conditions:
+              - entity: binary_sensor.voiture_trajet_en_cours
+                state: 'on'
               - entity: sensor.voiture_consommation_aux_100
                 state_not: unavailable
               - entity: sensor.voiture_consommation_aux_100
@@ -1073,8 +1075,8 @@ views:
             icon: mdi:map-marker-path
           - type: custom:mushroom-template-card
             icon: mdi:car-arrow-right
-            icon_color: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{{ ''green'' if t is mapping and t.active else ''grey'' }}'
-            primary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{{ (''Trajet en cours'' if t.active else ''Dernier trajet'') if t is mapping else ''Aucun trajet'' }}'
+            icon_color: '{{ ''green'' if is_state(''binary_sensor.voiture_trajet_en_cours'', ''on'') else ''grey'' }}'
+            primary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{{ (''Trajet en cours'' if is_state(''binary_sensor.voiture_trajet_en_cours'', ''on'') else ''Dernier trajet'') if t is mapping else ''Aucun trajet'' }}{{ '' · hors ligne'' if is_state(''binary_sensor.voiture_en_ligne'', ''off'') else '''' }}'
             secondary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{% if t is mapping %}{{ t.distance_km | round(1) }} km · {{ t.duration_min | round(0) | int }} min · {{ t.avg_kmh | round(0) | int }} km/h moy. · max {{ t.max_kmh | int }}{% endif %}'
             grid_options:
               columns: 12
