@@ -9,7 +9,7 @@
 #
 # À adapter :
 #   - notify.mobile_app_mycar   → l'autoradio (annonces vocales)
-#   - notify.notify             → votre téléphone (ex. notify.mobile_app_pixel_8)
+#   - notify.rappels            → votre téléphone (groupe de notifications)
 #   - les intervalles d'entretien (section « Entretien », variables en tête de chaque capteur)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -364,7 +364,7 @@ script:
       vocal:
         description: Texte dit sur l'autoradio (facultatif)
     sequence:
-      - action: notify.notify
+      - action: notify.rappels
         data:
           title: "{{ titre }}"
           message: "{{ message }}"
@@ -561,7 +561,7 @@ automation:
             entity_id: input_boolean.voiture_notif_fin_trajet
             state: "on"
         then:
-          - action: notify.notify
+          - action: notify.rappels
             data:
               title: "🚗 Trajet terminé"
               message: >-
@@ -741,7 +741,7 @@ automation:
             {{ r.l }}
       - condition: template
         value_template: "{{ rappels | length > 0 }}"
-      - action: notify.notify
+      - action: notify.rappels
         data:
           title: "🔧 Entretien de la voiture"
           message: "{{ rappels | join('\n') }}"
@@ -751,7 +751,7 @@ automation:
   #   alias: Voiture — arrivée à la maison
   #   triggers:
   #     - trigger: zone
-  #       entity_id: device_tracker.mycar
+  #       entity_id: device_tracker.peugeot_407
   #       zone: zone.home
   #       event: enter
   #   actions:
