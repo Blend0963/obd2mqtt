@@ -260,8 +260,12 @@ class VoitureGpsCard extends HTMLElement {
       this._showMessage(`Entité introuvable : ${this._config.entity}`);
       return;
     }
-    const { course, speed } = state.attributes;
-    let { latitude, longitude } = state.attributes;
+    const attrs = state.attributes;
+    // Heading and speed (m/s) under the names used by the companion app, GPSLogger, OwnTracks…
+    const num = (v) => (v === undefined || v === null || v === "" ? undefined : Number(v));
+    const course = num(attrs.course ?? attrs.direction ?? attrs.bearing ?? attrs.heading);
+    const speed = num(attrs.speed ?? attrs.velocity);
+    let { latitude, longitude } = attrs;
     // Geocoded-location sensors carry the position as "location: [lat, lon]"
     if (typeof latitude !== "number" && Array.isArray(state.attributes.location)) {
       [latitude, longitude] = state.attributes.location.map(Number);
@@ -296,7 +300,7 @@ class VoitureGpsCard extends HTMLElement {
     } else if (previous && distance(previous, point) > 8) {
       this._heading = bearing(previous, point);
     }
-    this._fix = { point, time: performance.now(), gpsSpeed: typeof gpsSpeed === "number" ? gpsSpeed : 0, updated };
+    this._fix = { point, time: performance.now(), gpsSpeed: Number.isFinite(gpsSpeed) ? gpsSpeed : 0, updated };
     if (!previous || distance(previous, point) > 3) {
       this._trail.push(point);
       if (this._trail.length > TRAIL_POINTS) this._trail.shift();
