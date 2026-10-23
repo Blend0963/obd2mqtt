@@ -511,54 +511,23 @@ views:
               - entity: sensor.pression_turbo
                 name: Turbo
                 y_axis: secondary
-          - type: conditional
-            conditions:
-              - condition: state
-                entity: input_boolean.voiture_conso_en_l_h
-                state_not: 'on'
-            card:
-              type: custom:mini-graph-card
-              name: Consommation L/100 km · toucher pour L/h
-              hours_to_show: 0.25
-              points_per_hour: 120
-              height: 100
-              line_width: 2
-              smoothing: true
-              show:
-                fill: fade
-                legend: false
-              entities:
-                - entity: sensor.voiture_consommation_aux_100
-                  name: L/100
-              tap_action:
-                action: call-service
-                service: input_boolean.toggle
-                service_data:
-                  entity_id: input_boolean.voiture_conso_en_l_h
-          - type: conditional
-            conditions:
-              - condition: state
-                entity: input_boolean.voiture_conso_en_l_h
-                state: 'on'
-            card:
-              type: custom:mini-graph-card
-              name: Consommation L/h · toucher pour L/100
-              hours_to_show: 0.25
-              points_per_hour: 120
-              height: 100
-              line_width: 2
-              smoothing: true
-              show:
-                fill: fade
-                legend: false
-              entities:
-                - entity: sensor.voiture_consommation_instantanee
-                  name: L/h
-              tap_action:
-                action: call-service
-                service: input_boolean.toggle
-                service_data:
-                  entity_id: input_boolean.voiture_conso_en_l_h
+          - type: custom:mini-graph-card
+            name: Consommation
+            hours_to_show: 0.25
+            points_per_hour: 120
+            height: 100
+            line_width: 2
+            smoothing: true
+            show:
+              fill: fade
+              legend: true
+            entities:
+              - entity: sensor.voiture_consommation_aux_100
+                name: L/100 km
+              - entity: sensor.voiture_consommation_instantanee
+                name: L/h
+                y_axis: secondary
+                show_fill: false
       - type: grid
         cards:
           - type: heading
