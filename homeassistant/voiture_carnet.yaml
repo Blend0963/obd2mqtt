@@ -71,6 +71,15 @@ input_number:
     step: 0.01
     mode: box
   # Calculés automatiquement, à ne pas modifier à la main
+  # Somme des trajets seulement : recaler le kilométrage ne la change pas
+  voiture_distance_cumulee:
+    name: Voiture — distance parcourue (total des trajets)
+    icon: mdi:map-marker-distance
+    unit_of_measurement: km
+    min: 0
+    max: 9999999
+    step: 0.01
+    mode: box
   voiture_carburant_total:
     name: Voiture — carburant consommé (total)
     icon: mdi:gas-station
@@ -197,6 +206,14 @@ template:
         state_class: total_increasing
         icon: mdi:counter
         state: "{{ states('input_number.voiture_kilometrage') | float(0) | round(0) }}"
+
+      - name: Voiture distance parcourue
+        unique_id: voiture_distance_parcourue
+        unit_of_measurement: km
+        device_class: distance
+        state_class: total_increasing
+        icon: mdi:map-marker-distance
+        state: "{{ states('input_number.voiture_distance_cumulee') | float(0) | round(2) }}"
 
       - name: Voiture carburant consommé
         unique_id: voiture_carburant_consomme
@@ -325,11 +342,11 @@ template:
 utility_meter:
   voiture_km_semaine:
     name: Voiture km cette semaine
-    source: sensor.voiture_kilometrage
+    source: sensor.voiture_distance_parcourue
     cycle: weekly
   voiture_km_mois:
     name: Voiture km ce mois
-    source: sensor.voiture_kilometrage
+    source: sensor.voiture_distance_parcourue
     cycle: monthly
   voiture_carburant_mois:
     name: Voiture carburant ce mois
@@ -529,6 +546,11 @@ automation:
           entity_id: input_number.voiture_kilometrage
         data:
           value: "{{ (states('input_number.voiture_kilometrage') | float(0) + t.distance_km) | round(1) }}"
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.voiture_distance_cumulee
+        data:
+          value: "{{ (states('input_number.voiture_distance_cumulee') | float(0) + t.distance_km) | round(2) }}"
       - action: input_number.set_value
         target:
           entity_id: input_number.voiture_carburant_total
