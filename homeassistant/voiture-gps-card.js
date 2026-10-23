@@ -11,7 +11,8 @@
  * ⋮ → Ressources → Ajouter : URL /local/voiture-gps-card.js, type « Module JavaScript ».
  *
  * type: custom:voiture-gps-card
- * entity: device_tracker.mycar                    # requis : position (appli compagnon)
+ * entity: device_tracker.mycar                    # requis : position (appli compagnon), ou un capteur
+ *                                                 # avec un attribut location: [lat, lon] (adresse géocodée)
  * speed_entity: sensor.peugeot_407_vitesse        # facultatif : vitesse OBD en km/h
  * speed_limit_entity: sensor.vitesse_limite       # facultatif : panneau de limitation
  * zoom: 16                                        # facultatif
@@ -259,8 +260,13 @@ class VoitureGpsCard extends HTMLElement {
       this._showMessage(`Entité introuvable : ${this._config.entity}`);
       return;
     }
-    const { latitude, longitude, course, speed } = state.attributes;
-    if (typeof latitude !== "number" || typeof longitude !== "number") {
+    const { course, speed } = state.attributes;
+    let { latitude, longitude } = state.attributes;
+    // Geocoded-location sensors carry the position as "location: [lat, lon]"
+    if (typeof latitude !== "number" && Array.isArray(state.attributes.location)) {
+      [latitude, longitude] = state.attributes.location.map(Number);
+    }
+    if (typeof latitude !== "number" || typeof longitude !== "number" || isNaN(latitude) || isNaN(longitude)) {
       this._showMessage("Pas encore de position GPS");
       return;
     }
