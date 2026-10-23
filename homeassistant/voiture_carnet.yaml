@@ -144,6 +144,10 @@ input_boolean:
   voiture_notif_fin_trajet:
     name: Voiture — résumé de fin de trajet
     icon: mdi:message-text
+  # Graphe de consommation du dashboard : éteint = L/100 km, allumé = L/h
+  voiture_conso_en_l_h:
+    name: Voiture — consommation affichée en L/h
+    icon: mdi:swap-horizontal
 
 input_select:
   voiture_entretien:

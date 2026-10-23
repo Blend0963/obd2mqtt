@@ -33,8 +33,7 @@ views:
               navigation_path: diagnostic
           - type: conditional
             conditions:
-              - &id001
-                entity: binary_sensor.voiture_en_ligne
+              - entity: binary_sensor.voiture_en_ligne
                 state: 'on'
             chip:
               type: template
@@ -43,7 +42,8 @@ views:
               content: '{% set t = states(''sensor.peugeot_407_temperature_liquide_de_refroidissement'') | float(0) %}{{ t | int }} °C{{ '' · Surchauffe !'' if t >= 105 else '''' }}'
           - type: conditional
             conditions:
-              - *id001
+              - entity: binary_sensor.voiture_en_ligne
+                state: 'on'
             chip:
               type: template
               icon: mdi:car-battery
@@ -511,19 +511,54 @@ views:
               - entity: sensor.pression_turbo
                 name: Turbo
                 y_axis: secondary
-          - type: custom:mini-graph-card
-            name: Consommation (L/h, aussi à l'arrêt)
-            hours_to_show: 0.25
-            points_per_hour: 120
-            height: 100
-            line_width: 2
-            smoothing: true
-            show:
-              fill: fade
-              legend: false
-            entities:
-              - entity: sensor.voiture_consommation_instantanee
-                name: L/h
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: input_boolean.voiture_conso_en_l_h
+                state_not: 'on'
+            card:
+              type: custom:mini-graph-card
+              name: Consommation L/100 km · toucher pour L/h
+              hours_to_show: 0.25
+              points_per_hour: 120
+              height: 100
+              line_width: 2
+              smoothing: true
+              show:
+                fill: fade
+                legend: false
+              entities:
+                - entity: sensor.voiture_consommation_aux_100
+                  name: L/100
+              tap_action:
+                action: call-service
+                service: input_boolean.toggle
+                service_data:
+                  entity_id: input_boolean.voiture_conso_en_l_h
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: input_boolean.voiture_conso_en_l_h
+                state: 'on'
+            card:
+              type: custom:mini-graph-card
+              name: Consommation L/h · toucher pour L/100
+              hours_to_show: 0.25
+              points_per_hour: 120
+              height: 100
+              line_width: 2
+              smoothing: true
+              show:
+                fill: fade
+                legend: false
+              entities:
+                - entity: sensor.voiture_consommation_instantanee
+                  name: L/h
+              tap_action:
+                action: call-service
+                service: input_boolean.toggle
+                service_data:
+                  entity_id: input_boolean.voiture_conso_en_l_h
       - type: grid
         cards:
           - type: heading
