@@ -266,8 +266,13 @@ class VoitureGpsCard extends HTMLElement {
     if (typeof latitude !== "number" && Array.isArray(state.attributes.location)) {
       [latitude, longitude] = state.attributes.location.map(Number);
     }
+    // Some integrations send the coordinates as text
+    latitude = typeof latitude === "string" ? parseFloat(latitude) : latitude;
+    longitude = typeof longitude === "string" ? parseFloat(longitude) : longitude;
     if (typeof latitude !== "number" || typeof longitude !== "number" || isNaN(latitude) || isNaN(longitude)) {
-      this._showMessage("Pas encore de position GPS");
+      // Say exactly what was received, so a wrong entity or a missing attribute is obvious
+      const keys = Object.keys(state.attributes).join(", ") || "aucun";
+      this._showMessage(`Pas de position dans ${this._config.entity} (état : ${state.state}). Attributs reçus : ${keys}`);
       return;
     }
     const point = [longitude, latitude];
