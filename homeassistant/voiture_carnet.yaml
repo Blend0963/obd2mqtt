@@ -248,7 +248,7 @@ template:
         unit_of_measurement: €
         icon: mdi:currency-eur
         state: >-
-          {{ (states('sensor.voiture_carburant_mois') | float(0)
+          {{ (states('sensor.voiture_carburant_ce_mois') | float(0)
               * states('input_number.voiture_prix_gasoil') | float(0)) | round(2) }}
 
   # Historique des 10 derniers trajets et records, mis à jour à chaque fin de trajet
@@ -279,6 +279,8 @@ template:
           plus_long_trajet: "{{ [this.attributes.get('plus_long_trajet') or 0, trigger.event.data.distance_km or 0] | max }}"
           meilleur_score_eco: "{{ [this.attributes.get('meilleur_score_eco') or 0, trigger.event.data.eco_score or 0] | max }}"
 
+# Entités créées : sensor.voiture_km_cette_semaine, sensor.voiture_km_ce_mois,
+# sensor.voiture_carburant_ce_mois (Home Assistant les nomme d'après « name »)
 utility_meter:
   voiture_km_semaine:
     name: Voiture km cette semaine
