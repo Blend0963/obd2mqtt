@@ -1198,6 +1198,35 @@ views:
             grid_options:
               columns: 12
           - type: entities
+            title: "Historique d'entretien (modifiable)"
+            show_header_toggle: false
+            entities:
+              - entity: input_number.voiture_kilometrage
+                name: Kilométrage actuel
+              - type: section
+                label: Vidange
+              - entity: input_number.voiture_vidange_km
+                name: Kilométrage
+              - entity: input_datetime.voiture_vidange_date
+                name: Date
+              - type: section
+                label: Distribution
+              - entity: input_number.voiture_distribution_km
+                name: Kilométrage
+              - entity: input_datetime.voiture_distribution_date
+                name: Date
+              - type: section
+                label: Filtres
+              - entity: input_number.voiture_filtre_gasoil_km
+                name: Filtre à gasoil (km)
+              - entity: input_number.voiture_filtre_air_km
+                name: Filtre à air (km)
+              - type: section
+                label: Contrôle technique
+              - entity: input_datetime.voiture_controle_technique
+                name: Prochain contrôle
+          - type: entities
+            title: "Entretien fait aujourd'hui"
             show_header_toggle: false
             entities:
               - entity: input_select.voiture_entretien
