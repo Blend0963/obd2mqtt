@@ -13,8 +13,7 @@ sections:
     icon: mdi:car-arrow-right
     icon_color: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{{ ''green'' if t is mapping and t.active else ''grey'' }}'
     primary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{{ (''Trajet en cours'' if t.active else ''Dernier trajet'') if t is mapping else ''Aucun trajet'' }}'
-    secondary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{% if t is mapping %}{{ t.distance_km | round(1) }} km · {{ t.duration_min | round(0) | int }} min · {{ t.avg_kmh | round(0)
-      | int }} km/h moy. · max {{ t.max_kmh | int }}{% endif %}'
+    secondary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{% if t is mapping %}{{ t.distance_km | round(1) }} km · {{ t.duration_min | round(0) | int }} min · {{ t.avg_kmh | round(0) | int }} km/h moy. · max {{ t.max_kmh | int }}{% endif %}'
     grid_options:
       columns: 12
   - type: custom:mushroom-template-card
@@ -72,11 +71,9 @@ sections:
       columns: 12
   - type: custom:mushroom-template-card
     icon: mdi:oil
-    icon_color: '{% set km = states(''sensor.voiture_vidange'') | float(0) %}{% set saisi = states(''input_number.voiture_vidange_km'') | float(0) > 0 %}{% set j = state_attr(''sensor.voiture_vidange'',
-      ''jours_restants'') %}{{ ''grey'' if not saisi else (''red'' if km < 0 or (j is number and j < 0) else (''orange'' if km < 1000 or (j is number and j < 30) else ''green'')) }}'
+    icon_color: '{% set km = states(''sensor.voiture_vidange'') | float(0) %}{% set saisi = states(''input_number.voiture_vidange_km'') | float(0) > 0 %}{% set j = state_attr(''sensor.voiture_vidange'', ''jours_restants'') %}{{ ''grey'' if not saisi else (''red'' if km < 0 or (j is number and j < 0) else (''orange'' if km < 1000 or (j is number and j < 30) else ''green'')) }}'
     primary: Vidange
-    secondary: '{% set km = states(''sensor.voiture_vidange'') | float(0) %}{% set j = state_attr(''sensor.voiture_vidange'', ''jours_restants'') %}{% if states(''input_number.voiture_vidange_km'') | float(0)
-      == 0 %}À renseigner{% elif km < 0 %}Dépassée de {{ (-km) | int }} km{% else %}Dans {{ km | int }} km{{ '' ou '' ~ j ~ '' j'' if j is number }}{% endif %}'
+    secondary: '{% set km = states(''sensor.voiture_vidange'') | float(0) %}{% set j = state_attr(''sensor.voiture_vidange'', ''jours_restants'') %}{% if states(''input_number.voiture_vidange_km'') | float(0) == 0 %}À renseigner{% elif km < 0 %}Dépassée de {{ (-km) | int }} km{% else %}Dans {{ km | int }} km{{ '' ou '' ~ j ~ '' j'' if j is number }}{% endif %}'
     tap_action:
       action: navigate
       navigation_path: entretien
@@ -84,11 +81,9 @@ sections:
       columns: 6
   - type: custom:mushroom-template-card
     icon: mdi:cog-sync
-    icon_color: '{% set km = states(''sensor.voiture_distribution'') | float(0) %}{% set saisi = states(''input_number.voiture_distribution_km'') | float(0) > 0 %}{{ ''grey'' if not saisi else (''red''
-      if km < 0 else (''orange'' if km < 10000 else ''green'')) }}'
+    icon_color: '{% set km = states(''sensor.voiture_distribution'') | float(0) %}{% set saisi = states(''input_number.voiture_distribution_km'') | float(0) > 0 %}{{ ''grey'' if not saisi else (''red'' if km < 0 else (''orange'' if km < 10000 else ''green'')) }}'
     primary: Distribution
-    secondary: '{% set km = states(''sensor.voiture_distribution'') | float(0) %}{% if states(''input_number.voiture_distribution_km'') | float(0) == 0 %}À renseigner{% elif km < 0 %}Dépassé de {{ (-km)
-      | int }} km{% else %}Dans {{ km | int }} km{% endif %}'
+    secondary: '{% set km = states(''sensor.voiture_distribution'') | float(0) %}{% if states(''input_number.voiture_distribution_km'') | float(0) == 0 %}À renseigner{% elif km < 0 %}Dépassé de {{ (-km) | int }} km{% else %}Dans {{ km | int }} km{% endif %}'
     tap_action:
       action: navigate
       navigation_path: entretien
@@ -96,11 +91,9 @@ sections:
       columns: 6
   - type: custom:mushroom-template-card
     icon: mdi:filter
-    icon_color: '{% set km = states(''sensor.voiture_filtre_a_gasoil'') | float(0) %}{% set saisi = states(''input_number.voiture_filtre_gasoil_km'') | float(0) > 0 %}{{ ''grey'' if not saisi else (''red''
-      if km < 0 else (''orange'' if km < 3000 else ''green'')) }}'
+    icon_color: '{% set km = states(''sensor.voiture_filtre_a_gasoil'') | float(0) %}{% set saisi = states(''input_number.voiture_filtre_gasoil_km'') | float(0) > 0 %}{{ ''grey'' if not saisi else (''red'' if km < 0 else (''orange'' if km < 3000 else ''green'')) }}'
     primary: Filtre à gasoil
-    secondary: '{% set km = states(''sensor.voiture_filtre_a_gasoil'') | float(0) %}{% if states(''input_number.voiture_filtre_gasoil_km'') | float(0) == 0 %}À renseigner{% elif km < 0 %}Dépassé de {{ (-km)
-      | int }} km{% else %}Dans {{ km | int }} km{% endif %}'
+    secondary: '{% set km = states(''sensor.voiture_filtre_a_gasoil'') | float(0) %}{% if states(''input_number.voiture_filtre_gasoil_km'') | float(0) == 0 %}À renseigner{% elif km < 0 %}Dépassé de {{ (-km) | int }} km{% else %}Dans {{ km | int }} km{% endif %}'
     tap_action:
       action: navigate
       navigation_path: entretien
@@ -108,11 +101,9 @@ sections:
       columns: 6
   - type: custom:mushroom-template-card
     icon: mdi:air-filter
-    icon_color: '{% set km = states(''sensor.voiture_filtre_a_air'') | float(0) %}{% set saisi = states(''input_number.voiture_filtre_air_km'') | float(0) > 0 %}{{ ''grey'' if not saisi else (''red'' if
-      km < 0 else (''orange'' if km < 3000 else ''green'')) }}'
+    icon_color: '{% set km = states(''sensor.voiture_filtre_a_air'') | float(0) %}{% set saisi = states(''input_number.voiture_filtre_air_km'') | float(0) > 0 %}{{ ''grey'' if not saisi else (''red'' if km < 0 else (''orange'' if km < 3000 else ''green'')) }}'
     primary: Filtre à air
-    secondary: '{% set km = states(''sensor.voiture_filtre_a_air'') | float(0) %}{% if states(''input_number.voiture_filtre_air_km'') | float(0) == 0 %}À renseigner{% elif km < 0 %}Dépassé de {{ (-km) |
-      int }} km{% else %}Dans {{ km | int }} km{% endif %}'
+    secondary: '{% set km = states(''sensor.voiture_filtre_a_air'') | float(0) %}{% if states(''input_number.voiture_filtre_air_km'') | float(0) == 0 %}À renseigner{% elif km < 0 %}Dépassé de {{ (-km) | int }} km{% else %}Dans {{ km | int }} km{% endif %}'
     tap_action:
       action: navigate
       navigation_path: entretien
