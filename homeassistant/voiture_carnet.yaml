@@ -148,6 +148,23 @@ input_select:
 
 # ─── Capteurs ────────────────────────────────────────────────────────────────
 template:
+  # Pour afficher ou cacher les pastilles de l'Aperçu
+  - binary_sensor:
+      - name: Voiture trajet en cours
+        unique_id: voiture_trajet_en_cours
+        icon: mdi:map-marker-path
+        state: >-
+          {% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}
+          {{ t is mapping and t.active
+             and (now() - states.sensor.peugeot_407_trajet.last_updated).total_seconds() < 180 }}
+      - name: Voiture entretien à prévoir
+        unique_id: voiture_entretien_a_prevoir
+        icon: mdi:wrench-clock
+        state: >-
+          {% set v = states('sensor.voiture_vidange') | float(99999) %}
+          {% set ct = states('sensor.voiture_controle_technique') %}
+          {{ v < 1000 or (ct | is_number and ct | int < 30) }}
+
   - sensor:
       - name: Voiture kilométrage
         unique_id: voiture_kilometrage

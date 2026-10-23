@@ -58,34 +58,56 @@ views:
               icon: mdi:car-battery
               icon_color: "{% set v = states('sensor.peugeot_407_tension_batterie') | float(0) %}{{ 'green' if 12.4 <= v <= 14.8 else ('orange' if v >= 11.8 else 'red') }}"
               content: "{% set v = states('sensor.peugeot_407_tension_batterie') | float(0) %}{{ v }} V · {{ 'Alternateur OK' if v >= 13.3 else ('Batterie OK' if v >= 12.4 else 'Batterie faible') }}"
-          - type: template
-            icon: "{% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}{{ 'mdi:map-marker-path' if t is mapping and t.active else '' }}"
-            icon_color: blue
-            content: "{% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}{% if t is mapping and t.active %}{{ t.distance_km | round(1) }} km · {{ t.duration_min | round(0) | int }} min{% endif %}"
-            tap_action:
-              action: navigate
-              navigation_path: carnet
-          - type: template
-            icon: "{{ 'mdi:gas-station' if has_value('sensor.voiture_consommation_aux_100') else '' }}"
-            icon_color: "{% set c = states('sensor.voiture_consommation_aux_100') | float(0) %}{{ 'green' if c < 6 else ('orange' if c < 9 else 'red') }}"
-            content: "{% if has_value('sensor.voiture_consommation_aux_100') %}{{ states('sensor.voiture_consommation_aux_100') }} L/100{% endif %}"
-            tap_action:
-              action: navigate
-              navigation_path: carnet
-          - type: template
-            icon: "{% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}{{ 'mdi:leaf' if t is mapping and t.active else '' }}"
-            icon_color: "{% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}{% set s = t.eco_score if t is mapping else 100 %}{{ 'green' if s >= 80 else ('orange' if s >= 60 else 'red') }}"
-            content: "{% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}{% if t is mapping and t.active %}Éco {{ t.eco_score }}{% endif %}"
-            tap_action:
-              action: navigate
-              navigation_path: carnet
-          - type: template
-            icon: "{% set v = states('sensor.voiture_vidange') | float(99999) %}{% set ct = states('sensor.voiture_controle_technique') %}{{ 'mdi:wrench-clock' if v < 1000 or (ct | is_number and ct | int < 30) else '' }}"
-            icon_color: "{{ 'red' if states('sensor.voiture_vidange') | float(99999) < 0 else 'orange' }}"
-            content: "{% set v = states('sensor.voiture_vidange') | float(99999) %}{% set ct = states('sensor.voiture_controle_technique') %}{% if v < 0 %}Vidange dépassée de {{ (-v) | int }} km{% elif v < 1000 %}Vidange dans {{ v | int }} km{% elif ct | is_number and ct | int < 30 %}Contrôle technique dans {{ ct }} j{% endif %}"
-            tap_action:
-              action: navigate
-              navigation_path: carnet
+          - type: conditional
+            conditions:
+              - entity: binary_sensor.voiture_trajet_en_cours
+                state: 'on'
+            chip:
+              type: template
+              icon: mdi:map-marker-path
+              icon_color: blue
+              content: "{% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}{{ t.distance_km | round(1) }} km · {{ t.duration_min | round(0) | int }} min"
+              tap_action:
+                action: navigate
+                navigation_path: carnet
+          - type: conditional
+            conditions:
+              - entity: sensor.voiture_consommation_aux_100
+                state_not: unavailable
+              - entity: sensor.voiture_consommation_aux_100
+                state_not: unknown
+            chip:
+              type: template
+              icon: mdi:gas-station
+              icon_color: "{% set c = states('sensor.voiture_consommation_aux_100') | float(0) %}{{ 'green' if c < 6 else ('orange' if c < 9 else 'red') }}"
+              content: "{{ states('sensor.voiture_consommation_aux_100') }} L/100"
+              tap_action:
+                action: navigate
+                navigation_path: carnet
+          - type: conditional
+            conditions:
+              - entity: binary_sensor.voiture_trajet_en_cours
+                state: 'on'
+            chip:
+              type: template
+              icon: mdi:leaf
+              icon_color: "{% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}{% set s = t.eco_score if t is mapping else 100 %}{{ 'green' if s >= 80 else ('orange' if s >= 60 else 'red') }}"
+              content: "{% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}Éco {{ t.eco_score if t is mapping else '—' }}"
+              tap_action:
+                action: navigate
+                navigation_path: carnet
+          - type: conditional
+            conditions:
+              - entity: binary_sensor.voiture_entretien_a_prevoir
+                state: 'on'
+            chip:
+              type: template
+              icon: mdi:wrench-clock
+              icon_color: "{{ 'red' if states('sensor.voiture_vidange') | float(99999) < 0 else 'orange' }}"
+              content: "{% set v = states('sensor.voiture_vidange') | float(99999) %}{% set ct = states('sensor.voiture_controle_technique') %}{% if v < 0 %}Vidange dépassée de {{ (-v) | int }} km{% elif v < 1000 %}Vidange dans {{ v | int }} km{% elif ct | is_number and ct | int < 30 %}Contrôle technique dans {{ ct }} j{% endif %}"
+              tap_action:
+                action: navigate
+                navigation_path: carnet
         grid_options:
           columns: 12
     header:
