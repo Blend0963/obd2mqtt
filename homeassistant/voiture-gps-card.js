@@ -21,12 +21,15 @@
  * layout: coin                                   # « coin » : panneau en haut à droite, vitesse en bas
  *                                                 # « groupe » : panneau et vitesse côte à côte en bas
  * hide_attribution: false                         # masquer la mention OpenStreetMap / CARTO
- * style: <URL d'un style MapLibre>                # facultatif : fond de carte
+ * theme: auto                                    # « auto » : clair le jour, sombre la nuit (soleil) ;
+ *                                                 # « sombre » (défaut) ou « clair »
+ * style: <URL d'un style MapLibre>                # facultatif : fond de carte imposé
  */
 
 const MAPLIBRE_VERSION = "4.7.1";
 const MAPLIBRE_URL = `https://unpkg.com/maplibre-gl@${MAPLIBRE_VERSION}/dist/maplibre-gl`;
 const DEFAULT_STYLE = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
+const DAY_STYLE = "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json";
 /** Condensed road-sign-like typeface; @font-face only works at document level, not in a shadow root. */
 const FONT_URL = "https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&display=swap";
 const FONT = "'Barlow Condensed', 'Roboto Condensed', 'Arial Narrow', sans-serif";
@@ -121,7 +124,7 @@ class VoitureGpsCard extends HTMLElement {
       follow_pause: 15,
       layout: "coin",
       hide_attribution: false,
-      style: DEFAULT_STYLE,
+      theme: "sombre",
       ...config,
     };
     this._headingUp = this._config.heading_up;
@@ -238,6 +241,18 @@ class VoitureGpsCard extends HTMLElement {
     }
   }
 
+  /** Map style: an explicit `style`, else day/night following the sun with `theme: auto`. */
+  _styleUrl() {
+    if (this._config.style) return this._config.style;
+    const theme = this._config.theme;
+    if (theme === "clair") return DAY_STYLE;
+    if (theme === "auto") {
+      const sun = this._hass && this._hass.states["sun.sun"];
+      return sun && sun.state === "above_horizon" ? DAY_STYLE : DEFAULT_STYLE;
+    }
+    return DEFAULT_STYLE;
+  }
+
   _readStates() {
     const state = this._hass.states[this._config.entity];
     if (!state) {
@@ -256,6 +271,10 @@ class VoitureGpsCard extends HTMLElement {
     }
     this._updateOverlays();
     if (!this._mapLoading) this._initMap(point);
+    else if (this._map && this._style !== this._styleUrl()) {
+      this._style = this._styleUrl();
+      this._map.setStyle(this._style, { diff: false });  // full reload, so "style.load" re-adds the trail
+    }
   }
 
   _onFix(point, course, gpsSpeed, updated) {
@@ -325,7 +344,7 @@ class VoitureGpsCard extends HTMLElement {
     }
     const map = new maplibregl.Map({
       container: this._el("map"),
-      style: this._config.style,
+      style: (this._style = this._styleUrl()),
       center: point,
       zoom: this._config.zoom,
       pitch: this._config.pitch,
@@ -346,7 +365,9 @@ class VoitureGpsCard extends HTMLElement {
         if (e.originalEvent) this._setFollow(false);
       });
     }
-    map.on("load", () => {
+    // Also after a day/night style change, which drops the custom layers
+    map.on("style.load", () => {
+      if (map.getSource("trail")) return;
       map.addSource("trail", { type: "geojson", data: this._trailGeoJson() });
       map.addLayer({
         id: "trail",

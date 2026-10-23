@@ -29,6 +29,12 @@ class HaEntities(private val config: AppConfig) {
     val readinessName = "$device Tests antipollution incomplets"
     val readinessEntityId = sensorId(readinessName)
 
+    /** Current or last trip: state = distance, attribute "trajet" = the whole trip. */
+    val tripName = "$device Trajet"
+    val tripEntityId = sensorId(tripName)
+    val fuelRateName = "$device Consommation instantanée"
+    val fuelL100Name = "$device Consommation aux 100"
+
     val clearButtonName = "$device Effacer les défauts"
     /** Key under `input_button:` in YAML — the entity ID is `input_button.<key>`. */
     val clearButtonKey = slugify(clearButtonName)

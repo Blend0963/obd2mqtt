@@ -60,6 +60,8 @@ ELM327 ──BT──► BluetoothTransport (Classic/BLE)
 
 **Engine-off gate** — With `engineRunningOnly` (off by default: car units power off with the ignition), the service resets the adapter and reads `ATRV` before touching any ECU; below `ENGINE_RUNNING_VOLTAGE` (13.3 V) it throws `EngineOffException`, shows `WAITING_ENGINE` and rechecks every 20 s during the first 10 min after collection starts (the unit boots with the ignition, before the engine), then every 2 min, or at once when the screen turns on / Bluetooth turns on (`deviceWakeReceiver` → `recheckNow`: car head units sleep with the ignition instead of rebooting). A clear/read request (`wakeups`) wakes it and bypasses the gate once. `BootReceiver` also starts the service on QUICKBOOT_POWERON and MY_PACKAGE_REPLACED when auto-start is on.
 
+**Trips** (`trip/TripTracker.kt`) — Pure logic fed by every reading (process-level instance in `OBDCollectorService`, so a trip survives Bluetooth reconnections): starts at RPM ≥ 300, ends after 60 s engine stopped or 3 min without readings; integrates distance from speed, diesel fuel from MAF / AFR (lambda when < 1.95, else a load model), eco events, 0-100 / 80-120 timers, cranking voltage dip. The cumulative `Trip` goes out in every webhook payload (`"trip"`); HA (`homeassistant/voiture_carnet.yaml`) records each trip id once (inactive or stale 3 min) and runs servicing, fuel calibration from fill-ups, alerts and TTS.
+
 **`HaEntities`** (`webhook/`) — Single source of HA names/entity IDs (sensors, diagnostics, `input_button`) used by the YAML package, the dashboard and the button poller.
 
 **Language** — UI strings, notifications, error messages and PID names (which become HA sensor names) are in French, hardcoded in Compose (no string resources).

@@ -1,0 +1,725 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Carnet de bord de la voiture — /config/packages/voiture_carnet.yaml
+#
+# Trajets, kilométrage, entretien, consommation et coûts, records, alertes
+# (moteur, turbo, batterie, défauts), annonces vocales sur l'autoradio.
+#
+# Besoin : l'application OBD v1.0.10+ et, dans peugeot_407.yaml, les capteurs
+# « Trajet » (sensor.peugeot_407_trajet) et « Consommation instantanée ».
+#
+# À adapter :
+#   - notify.mobile_app_mycar   → l'autoradio (annonces vocales)
+#   - notify.notify             → votre téléphone (ex. notify.mobile_app_pixel_8)
+#   - les intervalles d'entretien (section « Entretien », variables en tête de chaque capteur)
+# ─────────────────────────────────────────────────────────────────────────────
+
+input_number:
+  voiture_kilometrage:
+    name: Voiture — kilométrage
+    icon: mdi:counter
+    unit_of_measurement: km
+    min: 0
+    max: 999999
+    step: 0.1
+    mode: box
+  voiture_vidange_km:
+    name: Voiture — kilométrage dernière vidange
+    icon: mdi:oil
+    unit_of_measurement: km
+    min: 0
+    max: 999999
+    step: 1
+    mode: box
+  voiture_filtre_gasoil_km:
+    name: Voiture — kilométrage dernier filtre à gasoil
+    icon: mdi:filter
+    unit_of_measurement: km
+    min: 0
+    max: 999999
+    step: 1
+    mode: box
+  voiture_filtre_air_km:
+    name: Voiture — kilométrage dernier filtre à air
+    icon: mdi:air-filter
+    unit_of_measurement: km
+    min: 0
+    max: 999999
+    step: 1
+    mode: box
+  voiture_distribution_km:
+    name: Voiture — kilométrage dernière distribution
+    icon: mdi:cog-sync
+    unit_of_measurement: km
+    min: 0
+    max: 999999
+    step: 1
+    mode: box
+  voiture_prix_gasoil:
+    name: Voiture — prix du gasoil
+    icon: mdi:currency-eur
+    unit_of_measurement: €/L
+    min: 0
+    max: 4
+    step: 0.001
+    mode: box
+  voiture_plein_litres:
+    name: Voiture — litres du plein
+    icon: mdi:gas-station
+    unit_of_measurement: L
+    min: 0
+    max: 100
+    step: 0.01
+    mode: box
+  # Calculés automatiquement, à ne pas modifier à la main
+  voiture_carburant_total:
+    name: Voiture — carburant consommé (total)
+    icon: mdi:gas-station
+    unit_of_measurement: L
+    min: 0
+    max: 999999
+    step: 0.01
+    mode: box
+  voiture_carburant_brut_depuis_plein:
+    name: Voiture — carburant estimé depuis le plein (brut)
+    icon: mdi:gas-station-outline
+    unit_of_measurement: L
+    min: 0
+    max: 9999
+    step: 0.01
+    mode: box
+  voiture_plein_km:
+    name: Voiture — kilométrage au dernier plein
+    icon: mdi:gas-station
+    unit_of_measurement: km
+    min: 0
+    max: 999999
+    step: 0.1
+    mode: box
+  voiture_conso_reelle:
+    name: Voiture — consommation réelle (dernier plein)
+    icon: mdi:gas-station
+    unit_of_measurement: L/100km
+    min: 0
+    max: 30
+    step: 0.01
+    mode: box
+
+input_datetime:
+  voiture_vidange_date:
+    name: Voiture — date dernière vidange
+    has_date: true
+    has_time: false
+  voiture_distribution_date:
+    name: Voiture — date dernière distribution
+    has_date: true
+    has_time: false
+  voiture_controle_technique:
+    name: Voiture — prochain contrôle technique
+    has_date: true
+    has_time: false
+
+input_text:
+  voiture_dernier_trajet_id:
+    name: Voiture — dernier trajet enregistré
+    max: 32
+  # Facteur appris des pleins (vide = 1, pas de correction). Calculé automatiquement.
+  voiture_correction_conso:
+    name: Voiture — correction de la consommation
+    icon: mdi:tune-variant
+    max: 10
+
+input_boolean:
+  voiture_annonces:
+    name: Voiture — annonces vocales
+    icon: mdi:account-voice
+  voiture_notif_fin_trajet:
+    name: Voiture — résumé de fin de trajet
+    icon: mdi:message-text
+
+input_select:
+  voiture_entretien:
+    name: Voiture — entretien effectué
+    icon: mdi:wrench
+    options:
+      - Vidange
+      - Filtre à gasoil
+      - Filtre à air
+      - Distribution
+
+# ─── Capteurs ────────────────────────────────────────────────────────────────
+template:
+  - sensor:
+      - name: Voiture kilométrage
+        unique_id: voiture_kilometrage
+        unit_of_measurement: km
+        device_class: distance
+        state_class: total_increasing
+        icon: mdi:counter
+        state: "{{ states('input_number.voiture_kilometrage') | float(0) | round(0) }}"
+
+      - name: Voiture carburant consommé
+        unique_id: voiture_carburant_consomme
+        unit_of_measurement: L
+        device_class: volume
+        state_class: total_increasing
+        icon: mdi:gas-station
+        state: "{{ states('input_number.voiture_carburant_total') | float(0) | round(2) }}"
+
+      # Consommation en direct, corrigée par les pleins
+      - name: Voiture consommation instantanée
+        unique_id: voiture_conso_instantanee
+        unit_of_measurement: L/h
+        state_class: measurement
+        icon: mdi:gas-station
+        availability: "{{ has_value('sensor.peugeot_407_consommation_instantanee') }}"
+        state: >-
+          {{ (states('sensor.peugeot_407_consommation_instantanee') | float(0)
+              * states('input_text.voiture_correction_conso') | float(1)) | round(1) }}
+      - name: Voiture consommation aux 100
+        unique_id: voiture_conso_100
+        unit_of_measurement: L/100km
+        state_class: measurement
+        icon: mdi:gas-station
+        availability: "{{ has_value('sensor.peugeot_407_consommation_aux_100') }}"
+        state: >-
+          {{ (states('sensor.peugeot_407_consommation_aux_100') | float(0)
+              * states('input_text.voiture_correction_conso') | float(1)) | round(1) }}
+
+      # ── Entretien : modifiez les intervalles ici ──
+      - name: Voiture vidange
+        unique_id: voiture_vidange
+        unit_of_measurement: km
+        icon: mdi:oil
+        state: >-
+          {% set intervalle_km = 10000 %}
+          {{ (states('input_number.voiture_vidange_km') | float(0) + intervalle_km
+              - states('input_number.voiture_kilometrage') | float(0)) | round(0) }}
+        attributes:
+          jours_restants: >-
+            {% set intervalle_jours = 365 %}
+            {% set d = states('input_datetime.voiture_vidange_date') | as_datetime %}
+            {{ ((d | as_local + timedelta(days=intervalle_jours) - now()).days) if d else none }}
+          intervalle_km: 10000
+      - name: Voiture filtre à gasoil
+        unique_id: voiture_filtre_gasoil
+        unit_of_measurement: km
+        icon: mdi:filter
+        state: >-
+          {% set intervalle_km = 60000 %}
+          {{ (states('input_number.voiture_filtre_gasoil_km') | float(0) + intervalle_km
+              - states('input_number.voiture_kilometrage') | float(0)) | round(0) }}
+        attributes:
+          intervalle_km: 60000
+      - name: Voiture filtre à air
+        unique_id: voiture_filtre_air
+        unit_of_measurement: km
+        icon: mdi:air-filter
+        state: >-
+          {% set intervalle_km = 40000 %}
+          {{ (states('input_number.voiture_filtre_air_km') | float(0) + intervalle_km
+              - states('input_number.voiture_kilometrage') | float(0)) | round(0) }}
+        attributes:
+          intervalle_km: 40000
+      # 2.0 HDi : 180 000 km ou 10 ans (à vérifier dans votre carnet d'entretien)
+      - name: Voiture distribution
+        unique_id: voiture_distribution
+        unit_of_measurement: km
+        icon: mdi:cog-sync
+        state: >-
+          {% set intervalle_km = 180000 %}
+          {{ (states('input_number.voiture_distribution_km') | float(0) + intervalle_km
+              - states('input_number.voiture_kilometrage') | float(0)) | round(0) }}
+        attributes:
+          jours_restants: >-
+            {% set d = states('input_datetime.voiture_distribution_date') | as_datetime %}
+            {{ ((d | as_local + timedelta(days=3652) - now()).days) if d else none }}
+          intervalle_km: 180000
+      - name: Voiture contrôle technique
+        unique_id: voiture_controle_technique
+        unit_of_measurement: j
+        icon: mdi:clipboard-check
+        state: >-
+          {% set d = states('input_datetime.voiture_controle_technique') | as_datetime %}
+          {{ (d | as_local - today_at()).days if d else none }}
+
+      # Coûts
+      - name: Voiture coût carburant ce mois
+        unique_id: voiture_cout_mois
+        unit_of_measurement: €
+        icon: mdi:currency-eur
+        state: >-
+          {{ (states('sensor.voiture_carburant_mois') | float(0)
+              * states('input_number.voiture_prix_gasoil') | float(0)) | round(2) }}
+
+  # Historique des 10 derniers trajets et records, mis à jour à chaque fin de trajet
+  - triggers:
+      - trigger: event
+        event_type: voiture_trajet_termine
+    sensor:
+      - name: Voiture historique des trajets
+        unique_id: voiture_historique_trajets
+        icon: mdi:history
+        state: "{{ [(this.attributes.get('trajets') or []) | length + 1, 10] | min }}"
+        attributes:
+          trajets: "{{ ((this.attributes.get('trajets') or []) + [trigger.event.data])[-10:] }}"
+      - name: Voiture records
+        unique_id: voiture_records
+        icon: mdi:trophy
+        state: "{{ now().isoformat() }}"
+        attributes:
+          zero_cent: >-
+            {% set old = this.attributes.get('zero_cent') %}
+            {% set new = trigger.event.data.t0_100 %}
+            {{ ([old, new] | reject('none') | min) if (old is not none or new is not none) else none }}
+          quatre_vingt_cent_vingt: >-
+            {% set old = this.attributes.get('quatre_vingt_cent_vingt') %}
+            {% set new = trigger.event.data.t80_120 %}
+            {{ ([old, new] | reject('none') | min) if (old is not none or new is not none) else none }}
+          vitesse_max: "{{ [this.attributes.get('vitesse_max') or 0, trigger.event.data.max_kmh or 0] | max }}"
+          plus_long_trajet: "{{ [this.attributes.get('plus_long_trajet') or 0, trigger.event.data.distance_km or 0] | max }}"
+          meilleur_score_eco: "{{ [this.attributes.get('meilleur_score_eco') or 0, trigger.event.data.eco_score or 0] | max }}"
+
+utility_meter:
+  voiture_km_semaine:
+    name: Voiture km cette semaine
+    source: sensor.voiture_kilometrage
+    cycle: weekly
+  voiture_km_mois:
+    name: Voiture km ce mois
+    source: sensor.voiture_kilometrage
+    cycle: monthly
+  voiture_carburant_mois:
+    name: Voiture carburant ce mois
+    source: sensor.voiture_carburant_consomme
+    cycle: monthly
+
+# ─── Scripts ─────────────────────────────────────────────────────────────────
+script:
+  voiture_annonce:
+    alias: Voiture — annonce vocale
+    mode: queued
+    fields:
+      message:
+        description: Texte à dire
+    sequence:
+      - condition: state
+        entity_id: input_boolean.voiture_annonces
+        state: "on"
+      - action: notify.mobile_app_mycar
+        data:
+          message: TTS
+          data:
+            tts_text: "{{ message }}"
+
+  voiture_alerte:
+    alias: Voiture — alerte (téléphone + autoradio)
+    mode: queued
+    fields:
+      titre:
+        description: Titre
+      message:
+        description: Message
+      vocal:
+        description: Texte dit sur l'autoradio (facultatif)
+    sequence:
+      - action: notify.notify
+        data:
+          title: "{{ titre }}"
+          message: "{{ message }}"
+      - if:
+          - condition: template
+            value_template: "{{ vocal is defined and vocal }}"
+        then:
+          - action: script.voiture_annonce
+            data:
+              message: "{{ vocal }}"
+
+  voiture_entretien_fait:
+    alias: Voiture — entretien effectué
+    icon: mdi:wrench-check
+    sequence:
+      - variables:
+          km: "{{ states('input_number.voiture_kilometrage') | float(0) }}"
+          element: "{{ states('input_select.voiture_entretien') }}"
+      - choose:
+          - conditions: "{{ element == 'Vidange' }}"
+            sequence:
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.voiture_vidange_km
+                data:
+                  value: "{{ km }}"
+              - action: input_datetime.set_datetime
+                target:
+                  entity_id: input_datetime.voiture_vidange_date
+                data:
+                  date: "{{ now().date() }}"
+          - conditions: "{{ element == 'Filtre à gasoil' }}"
+            sequence:
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.voiture_filtre_gasoil_km
+                data:
+                  value: "{{ km }}"
+          - conditions: "{{ element == 'Filtre à air' }}"
+            sequence:
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.voiture_filtre_air_km
+                data:
+                  value: "{{ km }}"
+          - conditions: "{{ element == 'Distribution' }}"
+            sequence:
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.voiture_distribution_km
+                data:
+                  value: "{{ km }}"
+              - action: input_datetime.set_datetime
+                target:
+                  entity_id: input_datetime.voiture_distribution_date
+                data:
+                  date: "{{ now().date() }}"
+      - action: persistent_notification.create
+        data:
+          title: Entretien enregistré
+          message: "{{ element }} à {{ km | round(0) | int }} km"
+
+  # Plein « à ras » : compare les litres réels à l'estimation et corrige la consommation
+  voiture_plein_fait:
+    alias: Voiture — plein effectué
+    icon: mdi:gas-station
+    sequence:
+      - variables:
+          litres: "{{ states('input_number.voiture_plein_litres') | float(0) }}"
+          estime: "{{ states('input_number.voiture_carburant_brut_depuis_plein') | float(0) }}"
+          km: "{{ states('input_number.voiture_kilometrage') | float(0) - states('input_number.voiture_plein_km') | float(0) }}"
+          ancienne: "{{ states('input_text.voiture_correction_conso') | float(1) }}"
+      - condition: template
+        value_template: "{{ litres > 0 }}"
+      # Correction seulement avec assez de données (sinon le plein n'était peut-être pas complet)
+      - if:
+          - condition: template
+            value_template: "{{ estime >= 5 and km >= 100 }}"
+        then:
+          # Moyenne avec l'ancienne valeur pour lisser les pleins approximatifs
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.voiture_correction_conso
+            data:
+              value: "{{ ((ancienne + litres / estime) / 2) | round(3) if ancienne != 1 else (litres / estime) | round(3) }}"
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.voiture_conso_reelle
+            data:
+              value: "{{ (litres / km * 100) | round(2) }}"
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.voiture_carburant_brut_depuis_plein
+        data:
+          value: 0
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.voiture_plein_km
+        data:
+          value: "{{ states('input_number.voiture_kilometrage') | float(0) }}"
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.voiture_plein_litres
+        data:
+          value: 0
+      - action: persistent_notification.create
+        data:
+          title: Plein enregistré
+          message: >-
+            {{ litres }} L.
+            {% if estime >= 5 and km >= 100 %}Consommation réelle : {{ (litres / km * 100) | round(1) }} L/100 km
+            (estimation corrigée ×{{ (litres / estime) | round(2) }}).{% else %}Le prochain plein servira à calibrer la consommation.{% endif %}
+
+# ─── Automatisations ─────────────────────────────────────────────────────────
+automation:
+  # Enregistre un trajet une seule fois : quand l'appli le déclare fini, ou quand il ne
+  # bouge plus depuis 3 minutes (autoradio éteint avec le contact)
+  - id: voiture_fin_de_trajet
+    alias: Voiture — fin de trajet
+    mode: single
+    triggers:
+      - trigger: time_pattern
+        minutes: /1
+    conditions:
+      - condition: template
+        value_template: >-
+          {% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}
+          {{ t is mapping and t.id | string != states('input_text.voiture_dernier_trajet_id')
+             and (not t.active or (now() - states.sensor.peugeot_407_trajet.last_updated).total_seconds() > 180)
+             and ((t.distance_km or 0) >= 0.3 or (t.duration_min or 0) >= 2) }}
+    actions:
+      - variables:
+          t: "{{ state_attr('sensor.peugeot_407_trajet', 'trajet') }}"
+          correction: "{{ states('input_text.voiture_correction_conso') | float(1) }}"
+          prix: "{{ states('input_number.voiture_prix_gasoil') | float(0) }}"
+          litres: "{{ ((t.fuel_l or 0) * correction) | round(2) }}"
+          trajet:
+            debut: "{{ (t.start / 1000) | timestamp_local }}"
+            fin: "{{ (t.end / 1000) | timestamp_local }}"
+            distance_km: "{{ t.distance_km }}"
+            duree_min: "{{ t.duration_min }}"
+            vitesse_moy: "{{ t.avg_kmh }}"
+            max_kmh: "{{ t.max_kmh }}"
+            litres: "{{ litres }}"
+            l100: "{{ (litres / t.distance_km * 100) | round(1) if t.distance_km >= 1 else none }}"
+            cout: "{{ (litres * prix) | round(2) }}"
+            eco_score: "{{ t.eco_score }}"
+            accelerations: "{{ t.harsh_accel }}"
+            freinages: "{{ t.harsh_brake }}"
+            ralenti_min: "{{ t.idle_min }}"
+            demarrage_v: "{{ t.crank_v }}"
+            t0_100: "{{ t.t0_100 }}"
+            t80_120: "{{ t.t80_120 }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.voiture_dernier_trajet_id
+        data:
+          value: "{{ t.id }}"
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.voiture_kilometrage
+        data:
+          value: "{{ (states('input_number.voiture_kilometrage') | float(0) + t.distance_km) | round(1) }}"
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.voiture_carburant_total
+        data:
+          value: "{{ (states('input_number.voiture_carburant_total') | float(0) + litres) | round(2) }}"
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.voiture_carburant_brut_depuis_plein
+        data:
+          value: "{{ (states('input_number.voiture_carburant_brut_depuis_plein') | float(0) + (t.fuel_l or 0)) | round(2) }}"
+      - event: voiture_trajet_termine
+        event_data:
+          debut: "{{ trajet.debut }}"
+          fin: "{{ trajet.fin }}"
+          distance_km: "{{ trajet.distance_km }}"
+          duree_min: "{{ trajet.duree_min }}"
+          vitesse_moy: "{{ trajet.vitesse_moy }}"
+          max_kmh: "{{ trajet.max_kmh }}"
+          litres: "{{ trajet.litres }}"
+          l100: "{{ trajet.l100 }}"
+          cout: "{{ trajet.cout }}"
+          eco_score: "{{ trajet.eco_score }}"
+          accelerations: "{{ trajet.accelerations }}"
+          freinages: "{{ trajet.freinages }}"
+          ralenti_min: "{{ trajet.ralenti_min }}"
+          demarrage_v: "{{ trajet.demarrage_v }}"
+          t0_100: "{{ trajet.t0_100 }}"
+          t80_120: "{{ trajet.t80_120 }}"
+      - if:
+          - condition: state
+            entity_id: input_boolean.voiture_notif_fin_trajet
+            state: "on"
+        then:
+          - action: notify.notify
+            data:
+              title: "🚗 Trajet terminé"
+              message: >-
+                {{ trajet.distance_km | round(1) }} km · {{ trajet.duree_min | round(0) | int }} min ·
+                {{ trajet.vitesse_moy | round(0) | int }} km/h de moyenne
+                {%- if trajet.l100 %} · {{ trajet.l100 }} L/100 · {{ trajet.cout }} €{% endif %}
+                · éco {{ trajet.eco_score }}/100
+
+  # Batterie au démarrage (chute de tension pendant que le démarreur tourne)
+  - id: voiture_batterie_demarrage
+    alias: Voiture — batterie au démarrage
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: sensor.peugeot_407_trajet
+        attribute: trajet
+    conditions:
+      - condition: template
+        value_template: >-
+          {% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}
+          {% set old = trigger.from_state.attributes.get('trajet') if trigger.from_state else none %}
+          {{ t is mapping and t.active and t.crank_v is not none and t.crank_v < 9.8
+             and (old is not mapping or old.id != t.id) }}
+    actions:
+      - action: script.voiture_alerte
+        data:
+          titre: "🔋 Batterie fatiguée"
+          message: >-
+            La tension est descendue à {{ state_attr('sensor.peugeot_407_trajet', 'trajet').crank_v }} V au démarrage
+            (normal : plus de 10 V). Faites tester la batterie.
+          vocal: Attention, la batterie a du mal au démarrage.
+
+  - id: voiture_moteur_froid
+    alias: Voiture — moteur froid sollicité
+    mode: single
+    triggers:
+      - trigger: template
+        value_template: >-
+          {{ states('sensor.peugeot_407_regime_moteur') | float(0) > 2500
+             and states('sensor.peugeot_407_temperature_liquide_de_refroidissement') | float(100) < 60 }}
+        for:
+          seconds: 3
+    actions:
+      - action: script.voiture_annonce
+        data:
+          message: Moteur froid, vas-y doucement.
+      - delay:
+          minutes: 3
+
+  - id: voiture_moteur_chaud
+    alias: Voiture — moteur à température
+    mode: single
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.peugeot_407_temperature_liquide_de_refroidissement
+        above: 75
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.from_state is not none and trigger.from_state.state | is_number }}"
+    actions:
+      - action: script.voiture_annonce
+        data:
+          message: Moteur chaud, tu peux y aller.
+
+  - id: voiture_surchauffe
+    alias: Voiture — surchauffe moteur
+    mode: single
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.peugeot_407_temperature_liquide_de_refroidissement
+        above: 105
+        for:
+          seconds: 10
+    actions:
+      - action: script.voiture_alerte
+        data:
+          titre: "🌡️ Surchauffe moteur"
+          message: >-
+            Température moteur : {{ states('sensor.peugeot_407_temperature_liquide_de_refroidissement') }} °C.
+            Arrêtez-vous dès que possible et vérifiez le liquide de refroidissement.
+          vocal: Attention, le moteur chauffe. Arrête-toi dès que possible.
+
+  - id: voiture_alternateur
+    alias: Voiture — alternateur faible
+    mode: single
+    triggers:
+      - trigger: template
+        value_template: >-
+          {{ states('sensor.peugeot_407_tension_batterie') | float(14) < 13.2
+             and states('sensor.peugeot_407_regime_moteur') | float(0) > 1000 }}
+        for:
+          minutes: 1
+    actions:
+      - action: script.voiture_alerte
+        data:
+          titre: "⚡ Charge batterie faible"
+          message: >-
+            {{ states('sensor.peugeot_407_tension_batterie') }} V moteur tournant (normal : 13,5 à 14,8 V).
+            Alternateur ou courroie à vérifier.
+          vocal: Attention, la batterie ne se recharge pas correctement.
+      - delay:
+          minutes: 30
+
+  # Pression d'admission trop basse en pleine charge : durite percée, vanne EGR, turbo…
+  - id: voiture_turbo_faible
+    alias: Voiture — pression turbo faible
+    mode: single
+    triggers:
+      - trigger: template
+        value_template: >-
+          {% set rpm = states('sensor.peugeot_407_regime_moteur') | float(0) %}
+          {{ states('sensor.peugeot_407_charge_moteur') | float(0) > 85 and 2000 < rpm < 3500
+             and states('sensor.peugeot_407_pression_collecteur_admission') | float(999) < 160 }}
+        for:
+          seconds: 5
+    actions:
+      - action: script.voiture_alerte
+        data:
+          titre: "🌀 Pression turbo faible"
+          message: >-
+            {{ states('sensor.peugeot_407_pression_collecteur_admission') }} kPa en pleine charge
+            (attendu : plus de 180). Durite de turbo, vanne EGR ou turbo à vérifier.
+      - delay:
+          minutes: 30
+
+  - id: voiture_nouveau_defaut_vocal
+    alias: Voiture — nouveau défaut (annonce)
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: sensor.peugeot_407_nombre_de_defauts
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ trigger.from_state is not none and trigger.from_state.state | is_number
+             and trigger.to_state.state | is_number
+             and trigger.to_state.state | int > trigger.from_state.state | int }}
+    actions:
+      - action: script.voiture_annonce
+        data:
+          message: Nouveau défaut moteur détecté.
+
+  - id: voiture_annonce_limite
+    alias: Voiture — annonce de la limitation
+    mode: restart
+    triggers:
+      - trigger: state
+        entity_id: sensor.vitesse_limite
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ trigger.to_state.state | is_number and trigger.from_state is not none
+             and trigger.to_state.state != trigger.from_state.state
+             and states('sensor.peugeot_407_vitesse') | float(0) > 10 }}
+    actions:
+      - action: script.voiture_annonce
+        data:
+          message: "Limite {{ trigger.to_state.state | int }}."
+
+  - id: voiture_rappel_entretien
+    alias: Voiture — rappels d'entretien
+    triggers:
+      - trigger: time
+        at: "09:00:00"
+    actions:
+      - variables:
+          rappels: >-
+            {% set r = namespace(l=[]) %}
+            {% set v = states('sensor.voiture_vidange') | float(99999) %}
+            {% set vj = state_attr('sensor.voiture_vidange', 'jours_restants') %}
+            {% if v < 500 or (vj is number and vj < 30) %}{% set r.l = r.l + ['Vidange : ' ~ (v | int) ~ ' km' ~ (' / ' ~ vj ~ ' j' if vj is number else '')] %}{% endif %}
+            {% for e, n in [('sensor.voiture_filtre_a_gasoil', 'Filtre à gasoil'), ('sensor.voiture_filtre_a_air', 'Filtre à air'), ('sensor.voiture_distribution', 'Distribution')] %}
+              {% if states(e) | float(99999) < 1000 %}{% set r.l = r.l + [n ~ ' : ' ~ (states(e) | int) ~ ' km'] %}{% endif %}
+            {% endfor %}
+            {% set ct = states('sensor.voiture_controle_technique') %}
+            {% if ct | is_number and ct | int < 30 %}{% set r.l = r.l + ['Contrôle technique dans ' ~ ct ~ ' jours'] %}{% endif %}
+            {{ r.l }}
+      - condition: template
+        value_template: "{{ rappels | length > 0 }}"
+      - action: notify.notify
+        data:
+          title: "🔧 Entretien de la voiture"
+          message: "{{ rappels | join('\n') }}"
+
+  # ── Domotique (exemples à adapter, désactivés) ──
+  # - id: voiture_arrivee_maison
+  #   alias: Voiture — arrivée à la maison
+  #   triggers:
+  #     - trigger: zone
+  #       entity_id: device_tracker.mycar
+  #       zone: zone.home
+  #       event: enter
+  #   actions:
+  #     - action: cover.open_cover
+  #       target:
+  #         entity_id: cover.portail          # votre portail / garage
+  #     - if:
+  #         - condition: sun
+  #           after: sunset
+  #       then:
+  #         - action: light.turn_on
+  #           target:
+  #             entity_id: light.exterieur     # votre éclairage extérieur

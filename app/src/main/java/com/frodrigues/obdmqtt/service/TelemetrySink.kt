@@ -8,6 +8,7 @@ import com.frodrigues.obdmqtt.obd.PidReading
 import com.frodrigues.obdmqtt.settings.AppConfig
 import com.frodrigues.obdmqtt.settings.AppSettings
 import com.frodrigues.obdmqtt.settings.PublishMode
+import com.frodrigues.obdmqtt.trip.Trip
 import com.frodrigues.obdmqtt.util.jsonString
 import com.frodrigues.obdmqtt.util.pidHex
 import com.frodrigues.obdmqtt.util.toPlainValue
@@ -36,6 +37,9 @@ interface TelemetrySink {
 
     /** Fault codes / check-engine light; HA keeps showing them after [stop]. */
     suspend fun publishDiagnostics(report: DiagnosticReport)
+
+    /** The current (or last) trip, sent along with the readings. Webhook only. */
+    fun updateTrip(trip: Trip?) {}
 
     /** Marks sensors unavailable and releases resources. Must not throw. */
     suspend fun stop()
@@ -164,6 +168,7 @@ class WebhookSink(
     private val newData = Channel<Unit>(Channel.CONFLATED)
     @Volatile private var lastSnapshot: Map<Int, Double> = emptyMap()
     @Volatile private var diagnostics: DiagnosticReport? = null
+    @Volatile private var trip: Trip? = null
 
     override suspend fun start(scope: CoroutineScope, mac: String, supportedPids: Set<Int>, mode22Pids: Set<Int>) {
         // Invalid URL / ID is a config error: throw so the service shows "Reconnecting"
@@ -180,7 +185,7 @@ class WebhookSink(
                 val snapshot = pending.getAndSet(null) ?: continue
                 lastSentAt = System.currentTimeMillis()
                 try {
-                    p.post(WebhookPayload.readings(snapshot, config.deviceName, lastSentAt, diagnostics))
+                    p.post(WebhookPayload.readings(snapshot, config.deviceName, lastSentAt, diagnostics, trip))
                     onStatus(ConnectionStatus.CONNECTED)
                 } catch (e: CancellationException) {
                     throw e
@@ -200,6 +205,10 @@ class WebhookSink(
         newData.trySend(Unit)
     }
 
+    override fun updateTrip(trip: Trip?) {
+        this.trip = trip
+    }
+
     override suspend fun publishDiagnostics(report: DiagnosticReport) {
         diagnostics = report
         pending.compareAndSet(null, lastSnapshot)  // send it even without new readings
@@ -212,7 +221,7 @@ class WebhookSink(
         publisher?.let { p ->
             runCatching {
                 WebhookPublisher(p.url, timeoutMs = 5_000)
-                    .post(WebhookPayload.unavailable(config.deviceName, System.currentTimeMillis(), diagnostics))
+                    .post(WebhookPayload.unavailable(config.deviceName, System.currentTimeMillis(), diagnostics, trip))
             }
         }
         publisher = null

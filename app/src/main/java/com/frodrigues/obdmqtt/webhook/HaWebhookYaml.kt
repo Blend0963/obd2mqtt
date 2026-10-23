@@ -78,6 +78,28 @@ object HaWebhookYaml {
         appendLine("        attributes:")
         appendLine("          tests_incomplets: \"$DIAG{{ d.incomplete_monitors or [] }}\"")
         appendLine("          tests: \"$DIAG{{ d.monitors or [] }}\"")
+
+        // ── Trip: cumulative, so the last one received stays valid while the car is parked
+        val trip = "trigger.json.trip"
+        appendLine("      - name: ${yamlString(ha.tripName)}")
+        appendLine("        unique_id: ${yamlString("obd2_${mac}_trip")}")
+        appendLine("        icon: mdi:map-marker-path")
+        appendLine("        unit_of_measurement: \"km\"")
+        appendLine("        state: \"{{ $trip.distance_km if $trip is mapping else this.state | float(none) }}\"")
+        appendLine("        attributes:")
+        appendLine("          trajet: \"{{ $trip if $trip is mapping else this.attributes.get('trajet') }}\"")
+        listOf(
+            Triple(ha.fuelRateName, "fuel_lh", "L/h"),
+            Triple(ha.fuelL100Name, "fuel_l100_now", "L/100km"),
+        ).forEach { (name, key, unit) ->
+            appendLine("      - name: ${yamlString(name)}")
+            appendLine("        unique_id: ${yamlString("obd2_${mac}_$key")}")
+            appendLine("        icon: mdi:gas-station")
+            appendLine("        unit_of_measurement: ${yamlString(unit)}")
+            appendLine("        state_class: measurement")
+            appendLine("        availability: \"{{ trigger.json.available | default(false) and $trip is mapping and $trip.$key is not none }}\"")
+            appendLine("        state: \"{{ $trip.$key }}\"")
+        }
         appendLine("    binary_sensor:")
         appendLine("      - name: ${yamlString(ha.milName)}")
         appendLine("        unique_id: ${yamlString("obd2_${mac}_mil")}")

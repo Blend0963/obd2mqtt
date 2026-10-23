@@ -7,6 +7,8 @@ object PidRegistry {
      * Works on every car, even when the ECU doesn't support PID 0x42.
      */
     const val ADAPTER_VOLTAGE = 0x100
+    /** Wide-band O2 sensor 1, equivalence ratio. */
+    const val LAMBDA = 0x24
 
     /**
      * Announced by the ECU but not measurements (monitor status, OBD standard, sensors

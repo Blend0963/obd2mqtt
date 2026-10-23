@@ -33,6 +33,8 @@ import com.frodrigues.obdmqtt.settings.AppSettings
 import com.frodrigues.obdmqtt.settings.PublishMode
 import com.frodrigues.obdmqtt.settings.dataStore
 import com.frodrigues.obdmqtt.settings.AppConfig
+import com.frodrigues.obdmqtt.trip.Trip
+import com.frodrigues.obdmqtt.trip.TripTracker
 import com.frodrigues.obdmqtt.webhook.ClearButtonWatcher
 import com.frodrigues.obdmqtt.webhook.HaApiClient
 import com.frodrigues.obdmqtt.webhook.HaEntities
@@ -112,6 +114,8 @@ class OBDCollectorService : LifecycleService() {
             }
             ACTION_STOP -> {
                 stoppedByUser = true  // the auto-start safety net must not restart it until next boot
+                tripTracker.finishNow()
+                currentTrip.value = tripTracker.snapshot(System.currentTimeMillis())
                 stopCollection()
             }
         }
@@ -346,6 +350,10 @@ class OBDCollectorService : LifecycleService() {
                     currentReadings[reading.pid] = reading.value
                     val snapshot = currentReadings.toMap()
                     pidReadings.value = snapshot
+                    tripTracker.onReading(reading.pid, reading.value, reading.timestamp, snapshot)
+                    val trip = tripTracker.snapshot(reading.timestamp)
+                    currentTrip.value = trip
+                    sink.updateTrip(trip)
                     sink.publish(reading, snapshot)
                     lastUpdateTime.value = reading.timestamp
                 }
@@ -478,6 +486,13 @@ class OBDCollectorService : LifecycleService() {
         val pidReadings = MutableStateFlow<Map<Int, Double>>(emptyMap())
         /** OBD protocol detected by the ELM327, e.g. "ISO 15765-4 CAN 11 bits 500 kbit/s". */
         val obdProtocolLabel = MutableStateFlow("")
+        /**
+         * Trips span reconnections (Bluetooth drops mid-drive), so the tracker lives with the
+         * process, not with one collection session.
+         */
+        val tripTracker = TripTracker()
+        /** Running trip, or the last finished one. */
+        val currentTrip = MutableStateFlow<Trip?>(null)
         /** How long one read of all fast PIDs takes (ms, smoothed); 0 when not polling. */
         val cycleMs = MutableStateFlow(0L)
         /** Current step ("Recherche des PIDs (12/254)…"), also shown on the main screen. */

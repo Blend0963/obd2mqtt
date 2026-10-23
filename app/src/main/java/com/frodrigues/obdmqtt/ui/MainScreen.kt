@@ -37,6 +37,7 @@ fun MainScreen(
     val pidReadings by viewModel.pidReadings.collectAsState()
     val obdProtocol by viewModel.obdProtocolLabel.collectAsState()
     val cycleMs by viewModel.cycleMs.collectAsState()
+    val trip by viewModel.currentTrip.collectAsState()
     val statusText by viewModel.statusText.collectAsState()
     val diagnostics by viewModel.diagnostics.collectAsState()
     val engineOffVoltage by viewModel.engineOffVoltage.collectAsState()
@@ -235,6 +236,19 @@ fun MainScreen(
                             )
                         }
                     }
+                }
+
+                // ── Trip ──────────────────────────────────────────────────────
+                trip?.let { t ->
+                    Text(
+                        text = (if (t.active) "Trajet en cours : " else "Dernier trajet : ") +
+                               String.format(Locale.FRANCE, "%.1f km · %d min", t.distanceKm, (t.durationSeconds / 60).toInt()) +
+                               (t.litresPer100Km?.let { String.format(Locale.FRANCE, " · %.1f L/100 km (estimé)", it) } ?: "") +
+                               " · éco ${t.ecoScore}/100",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
                 }
 
                 // ── PID readings list ─────────────────────────────────────────
