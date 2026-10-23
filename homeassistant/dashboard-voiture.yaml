@@ -2,1338 +2,1340 @@ kiosk_mode:
   hide_sidebar: true
 title: Voiture
 views:
-  - title: Aperçu
-    path: apercu
-    icon: mdi:car
-    type: sections
-    max_columns: 3
-    badges:
+- title: Aperçu
+  path: apercu
+  icon: mdi:car
+  type: sections
+  max_columns: 3
+  badges:
+  - type: custom:mushroom-chips-card
+    alignment: start
+    chips:
+    - type: conditional
+      conditions:
+      - entity: sensor.peugeot_407_tension_batterie
+        state: unavailable
+      chip:
+        type: template
+        icon: mdi:access-point-off
+        icon_color: grey
+        content: Hors ligne
+    - type: template
+      icon: mdi:engine
+      icon_color: '{{ ''green'' if states(''sensor.peugeot_407_regime_moteur'') | float(0) > 300 else ''grey'' }}'
+      content: '{% set r = states(''sensor.peugeot_407_regime_moteur'') | float(0) %}{{ (r | int) ~ '' tr/min'' if r > 300 else ''Arrêté'' }}'
+    - type: template
+      icon: mdi:car-wrench
+      icon_color: '{{ ''red'' if is_state(''binary_sensor.peugeot_407_voyant_moteur'', ''on'') or not is_state(''sensor.peugeot_407_codes_defaut'', ''Aucun'') else ''green'' }}'
+      content: '{% set p = states(''sensor.peugeot_407_defauts_en_attente'') | int(0) %}{% if is_state(''binary_sensor.peugeot_407_voyant_moteur'', ''on'') %}Voyant allumé{% elif not is_state(''sensor.peugeot_407_codes_defaut'', ''Aucun'') %}{{ states(''sensor.peugeot_407_codes_defaut'') }}{% else %}Moteur OK{% endif %}{{ '' · '' ~ p ~ '' en attente'' if p > 0 else '''' }}'
+      tap_action:
+        action: navigate
+        navigation_path: diagnostic
+    - type: conditional
+      conditions:
+      - entity: sensor.peugeot_407_temperature_liquide_de_refroidissement
+        state_not: unavailable
+      chip:
+        type: template
+        icon: mdi:thermometer
+        icon_color: '{% set t = states(''sensor.peugeot_407_temperature_liquide_de_refroidissement'') | float(0) %}{{ ''blue'' if t < 60 else (''green'' if t < 100 else (''orange'' if t < 110 else ''red'')) }}'
+        content: '{% set t = states(''sensor.peugeot_407_temperature_liquide_de_refroidissement'') | float(0) %}{{ t | int }} °C{{ '' · Surchauffe !'' if t >= 105 else '''' }}'
+    - type: conditional
+      conditions:
+      - entity: sensor.peugeot_407_tension_batterie
+        state_not: unavailable
+      chip:
+        type: template
+        icon: mdi:car-battery
+        icon_color: '{% set v = states(''sensor.peugeot_407_tension_batterie'') | float(0) %}{{ ''green'' if 12.4 <= v <= 14.8 else (''orange'' if v >= 11.8 else ''red'') }}'
+        content: '{% set v = states(''sensor.peugeot_407_tension_batterie'') | float(0) %}{{ v }} V{{ '' · faible'' if v < 12.2 else '''' }}'
+    - type: conditional
+      conditions:
+      - entity: binary_sensor.voiture_trajet_en_cours
+        state: 'on'
+      chip:
+        type: template
+        icon: mdi:map-marker-path
+        icon_color: blue
+        content: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{{ t.distance_km | round(1) }} km'
+        tap_action:
+          action: navigate
+          navigation_path: carnet
+    - type: conditional
+      conditions:
+      - entity: sensor.voiture_consommation_aux_100
+        state_not: unavailable
+      - entity: sensor.voiture_consommation_aux_100
+        state_not: unknown
+      chip:
+        type: template
+        icon: mdi:gas-station
+        icon_color: '{% set c = states(''sensor.voiture_consommation_aux_100'') | float(0) %}{{ ''green'' if c < 6 else (''orange'' if c < 9 else ''red'') }}'
+        content: '{{ states(''sensor.voiture_consommation_aux_100'') }} L/100'
+        tap_action:
+          action: navigate
+          navigation_path: carnet
+    - type: conditional
+      conditions:
+      - entity: binary_sensor.voiture_trajet_en_cours
+        state: 'on'
+      chip:
+        type: template
+        icon: mdi:leaf
+        icon_color: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{% set s = t.eco_score if t is mapping else 100 %}{{ ''green'' if s >= 80 else (''orange'' if s >= 60 else ''red'') }}'
+        content: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}Éco {{ t.eco_score if t is mapping else ''—'' }}'
+        tap_action:
+          action: navigate
+          navigation_path: carnet
+    - type: conditional
+      conditions:
+      - entity: binary_sensor.voiture_entretien_a_prevoir
+        state: 'on'
+      chip:
+        type: template
+        icon: mdi:wrench-clock
+        icon_color: '{{ ''red'' if states(''sensor.voiture_vidange'') | float(99999) < 0 else ''orange'' }}'
+        content: '{% set v = states(''sensor.voiture_vidange'') | float(99999) %}{% set saisie = states(''input_number.voiture_vidange_km'') | float(0) > 0 %}{% set ct = states(''sensor.voiture_controle_technique'') | int(9999) %}{% if saisie and v < 0 %}Vidange dépassée{% elif saisie and v < 1000 %}Vidange : {{ v | int }} km{% elif ct < 0 %}Contrôle technique dépassé{% else %}Contrôle technique : {{ ct }} j{% endif %}'
+        tap_action:
+          action: navigate
+          navigation_path: carnet
+    card_mod:
+      style: |
+        ha-card {
+          --chip-height: 44px;
+          --chip-font-size: 16px;
+          --chip-font-weight: 600;
+          --chip-icon-size: 24px;
+          --chip-padding: 0 14px;
+          --chip-border-radius: 22px;
+          --chip-spacing: 8px;
+        }
+  header:
+    layout: start
+    badges_position: top
+    badges_wrap: wrap
+  sections:
+  - type: grid
+    cards:
+    - type: custom:clock-weather-card
+      entity: weather.peugeot_407
+      temperature_sensor: sensor.temperature_gps_autoradio
+      hide_forecast_section: true
+      grid_options:
+        columns: 12
+    - type: custom:voiture-gps-card
+      entity: device_tracker.peugeot_407
+      speed_entity: sensor.peugeot_407_vitesse
+      layout: coin
+      hide_attribution: true
+      theme: sombre
+      grid_options:
+        columns: 12
+        rows: 3
+    - type: custom:stack-in-card
+      mode: vertical
+      card_mod:
+        style: |
+          ha-card {
+            box-shadow: none;
+          }
+      cards:
+      - type: custom:mushroom-template-card
+        icon: mdi:music
+        icon_color: '{{ ''purple'' if is_state(''sensor.mycar_media_session'', ''Playing'') else ''grey'' }}'
+        primary: '{% set s = states.sensor.mycar_media_session %}{% set m = namespace(titre='''', artiste='''') %}{% for k, v in (s.attributes.items() if s else []) %}{% if k.startswith(''media_title'') and v and not m.titre %}{% set m.titre = v %}{% endif %}{% if k.startswith(''media_artist'') and v and not m.artiste %}{% set m.artiste = v %}{% endif %}{% endfor %}{% set n = states.sensor.voiture_musique %}{% if not m.titre and n and n.state not in [''unknown'', ''unavailable'', ''Inconnu''] %}{% set m.titre = n.state %}{% set m.artiste = n.attributes.get(''artiste'', '''') %}{% endif %}{{ m.titre or ''Rien en lecture'' }}'
+        secondary: '{% set s = states.sensor.mycar_media_session %}{% set m = namespace(titre='''', artiste='''') %}{% for k, v in (s.attributes.items() if s else []) %}{% if k.startswith(''media_title'') and v and not m.titre %}{% set m.titre = v %}{% endif %}{% if k.startswith(''media_artist'') and v and not m.artiste %}{% set m.artiste = v %}{% endif %}{% endfor %}{% set n = states.sensor.voiture_musique %}{% if not m.titre and n and n.state not in [''unknown'', ''unavailable'', ''Inconnu''] %}{% set m.titre = n.state %}{% set m.artiste = n.attributes.get(''artiste'', '''') %}{% endif %}{% set artiste = m.artiste %}{{ artiste ~ '' · '' if artiste else '''' }}{{ ''En lecture'' if is_state(''sensor.mycar_media_session'', ''Playing'') else ''En pause'' }}'
+        tap_action:
+          action: url
+          url_path: app://deezer.android.app
       - type: custom:mushroom-chips-card
-        alignment: start
-        chips:
-          - type: conditional
-            conditions:
-              - entity: sensor.peugeot_407_tension_batterie
-                state: unavailable
-            chip:
-              type: template
-              icon: mdi:access-point-off
-              icon_color: grey
-              content: Hors ligne
-          - type: template
-            icon: mdi:engine
-            icon_color: "{{ 'green' if states('sensor.peugeot_407_regime_moteur') | float(0) > 300 else 'grey' }}"
-            content: "{% set r = states('sensor.peugeot_407_regime_moteur') | float(0) %}{{ (r | int) ~ ' tr/min' if r > 300 else 'Arrêté' }}"
-          - type: template
-            icon: mdi:car-wrench
-            icon_color: "{{ 'red' if is_state('binary_sensor.peugeot_407_voyant_moteur', 'on') or not is_state('sensor.peugeot_407_codes_defaut', 'Aucun') else 'green' }}"
-            content: "{% set p = states('sensor.peugeot_407_defauts_en_attente') | int(0) %}{% if is_state('binary_sensor.peugeot_407_voyant_moteur', 'on') %}Voyant allumé{% elif not is_state('sensor.peugeot_407_codes_defaut', 'Aucun') %}{{ states('sensor.peugeot_407_codes_defaut') }}{% else %}Moteur OK{% endif %}{{ ' · ' ~ p ~ ' en attente' if p > 0 else '' }}"
-            tap_action:
-              action: navigate
-              navigation_path: diagnostic
-          - type: conditional
-            conditions:
-              - entity: sensor.peugeot_407_temperature_liquide_de_refroidissement
-                state_not: unavailable
-            chip:
-              type: template
-              icon: mdi:thermometer
-              icon_color: "{% set t = states('sensor.peugeot_407_temperature_liquide_de_refroidissement') | float(0) %}{{ 'blue' if t < 60 else ('green' if t < 100 else ('orange' if t < 110 else 'red')) }}"
-              content: "{% set t = states('sensor.peugeot_407_temperature_liquide_de_refroidissement') | float(0) %}{{ t | int }} °C{{ ' · Surchauffe !' if t >= 105 else '' }}"
-          - type: conditional
-            conditions:
-              - entity: sensor.peugeot_407_tension_batterie
-                state_not: unavailable
-            chip:
-              type: template
-              icon: mdi:car-battery
-              icon_color: "{% set v = states('sensor.peugeot_407_tension_batterie') | float(0) %}{{ 'green' if 12.4 <= v <= 14.8 else ('orange' if v >= 11.8 else 'red') }}"
-              content: "{% set v = states('sensor.peugeot_407_tension_batterie') | float(0) %}{{ v }} V{{ ' · faible' if v < 12.2 else '' }}"
-          - type: conditional
-            conditions:
-              - entity: binary_sensor.voiture_trajet_en_cours
-                state: 'on'
-            chip:
-              type: template
-              icon: mdi:map-marker-path
-              icon_color: blue
-              content: "{% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}{{ t.distance_km | round(1) }} km"
-              tap_action:
-                action: navigate
-                navigation_path: carnet
-          - type: conditional
-            conditions:
-              - entity: sensor.voiture_consommation_aux_100
-                state_not: unavailable
-              - entity: sensor.voiture_consommation_aux_100
-                state_not: unknown
-            chip:
-              type: template
-              icon: mdi:gas-station
-              icon_color: "{% set c = states('sensor.voiture_consommation_aux_100') | float(0) %}{{ 'green' if c < 6 else ('orange' if c < 9 else 'red') }}"
-              content: "{{ states('sensor.voiture_consommation_aux_100') }} L/100"
-              tap_action:
-                action: navigate
-                navigation_path: carnet
-          - type: conditional
-            conditions:
-              - entity: binary_sensor.voiture_trajet_en_cours
-                state: 'on'
-            chip:
-              type: template
-              icon: mdi:leaf
-              icon_color: "{% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}{% set s = t.eco_score if t is mapping else 100 %}{{ 'green' if s >= 80 else ('orange' if s >= 60 else 'red') }}"
-              content: "{% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}Éco {{ t.eco_score if t is mapping else '—' }}"
-              tap_action:
-                action: navigate
-                navigation_path: carnet
-          - type: conditional
-            conditions:
-              - entity: binary_sensor.voiture_entretien_a_prevoir
-                state: 'on'
-            chip:
-              type: template
-              icon: mdi:wrench-clock
-              icon_color: "{{ 'red' if states('sensor.voiture_vidange') | float(99999) < 0 else 'orange' }}"
-              content: "{% set v = states('sensor.voiture_vidange') | float(99999) %}{% set saisie = states('input_number.voiture_vidange_km') | float(0) > 0 %}{% set ct = states('sensor.voiture_controle_technique') | int(9999) %}{% if saisie and v < 0 %}Vidange dépassée{% elif saisie and v < 1000 %}Vidange : {{ v | int }} km{% elif ct < 0 %}Contrôle technique dépassé{% else %}Contrôle technique : {{ ct }} j{% endif %}"
-              tap_action:
-                action: navigate
-                navigation_path: carnet
+        alignment: center
         card_mod:
           style: |
             ha-card {
-              --chip-height: 44px;
-              --chip-font-size: 16px;
-              --chip-font-weight: 600;
-              --chip-icon-size: 24px;
-              --chip-padding: 0 14px;
-              --chip-border-radius: 22px;
-              --chip-spacing: 8px;
+              margin-top: -14px;
+              padding-bottom: 8px;
+              --chip-box-shadow: none;
+              --chip-border-width: 0;
+              --chip-background: none;
             }
-    header:
-      layout: start
-      badges_position: top
-      badges_wrap: wrap
-    sections:
-      - type: grid
-        cards:
-          - type: custom:clock-weather-card
-            entity: weather.peugeot_407
-            temperature_sensor: sensor.temperature_gps_autoradio
-            hide_forecast_section: true
-            grid_options:
-              columns: 12
-          - type: custom:voiture-gps-card
-            entity: device_tracker.peugeot_407
-            speed_entity: sensor.peugeot_407_vitesse
-            layout: coin
-            hide_attribution: true
-            theme: sombre
-            grid_options:
-              columns: 12
-              rows: 3
-          - type: custom:stack-in-card
-            mode: vertical
-            card_mod:
-              style: |
-                ha-card {
-                  box-shadow: none;
-                }
-            cards:
-              - type: custom:mushroom-template-card
-                icon: mdi:music
-                icon_color: "{{ 'purple' if is_state('sensor.mycar_media_session', 'Playing') else 'grey' }}"
-                primary: "{% set s = states.sensor.mycar_media_session %}{% set m = namespace(titre='', artiste='') %}{% for k, v in (s.attributes.items() if s else []) %}{% if k.startswith('media_title') and v and not m.titre %}{% set m.titre = v %}{% endif %}{% if k.startswith('media_artist') and v and not m.artiste %}{% set m.artiste = v %}{% endif %}{% endfor %}{% set n = states.sensor.voiture_musique %}{% if not m.titre and n and n.state not in ['unknown', 'unavailable', 'Inconnu'] %}{% set m.titre = n.state %}{% set m.artiste = n.attributes.get('artiste', '') %}{% endif %}{{ m.titre or 'Rien en lecture' }}"
-                secondary: "{% set s = states.sensor.mycar_media_session %}{% set m = namespace(titre='', artiste='') %}{% for k, v in (s.attributes.items() if s else []) %}{% if k.startswith('media_title') and v and not m.titre %}{% set m.titre = v %}{% endif %}{% if k.startswith('media_artist') and v and not m.artiste %}{% set m.artiste = v %}{% endif %}{% endfor %}{% set n = states.sensor.voiture_musique %}{% if not m.titre and n and n.state not in ['unknown', 'unavailable', 'Inconnu'] %}{% set m.titre = n.state %}{% set m.artiste = n.attributes.get('artiste', '') %}{% endif %}{% set artiste = m.artiste %}{{ artiste ~ ' · ' if artiste else '' }}{{ 'En lecture' if is_state('sensor.mycar_media_session', 'Playing') else 'En pause' }}"
-                tap_action:
-                  action: url
-                  url_path: app://deezer.android.app
-              - type: custom:mushroom-chips-card
-                alignment: center
-                card_mod:
-                  style: |
-                    ha-card {
-                      margin-top: -14px;
-                      padding-bottom: 8px;
-                      --chip-box-shadow: none;
-                      --chip-border-width: 0;
-                      --chip-background: none;
-                    }
-                chips:
-                  - type: template
-                    icon: mdi:skip-previous
-                    tap_action:
-                      action: perform-action
-                      perform_action: notify.mobile_app_mycar
-                      data:
-                        message: command_media
-                        data:
-                          media_command: previous
-                          media_package_name: deezer.android.app
-                  - type: template
-                    icon: "{{ 'mdi:pause' if is_state('sensor.mycar_media_session', 'Playing') else 'mdi:play' }}"
-                    icon_color: purple
-                    tap_action:
-                      action: perform-action
-                      perform_action: notify.mobile_app_mycar
-                      data:
-                        message: command_media
-                        data:
-                          media_command: play_pause
-                          media_package_name: deezer.android.app
-                  - type: template
-                    icon: mdi:skip-next
-                    tap_action:
-                      action: perform-action
-                      perform_action: notify.mobile_app_mycar
-                      data:
-                        message: command_media
-                        data:
-                          media_command: next
-                          media_package_name: deezer.android.app
-            grid_options:
-              columns: 12
-      - type: grid
-        cards:
-          - type: custom:modern-circular-gauge
-            entity: sensor.peugeot_407_vitesse
-            name: Vitesse
-            min: 0
-            max: 220
-            needle: true
-            grid_options:
-              columns: 8
-              rows: 4
-          - type: markdown
-            content: |
-              {% set l = states('sensor.vitesse_limite') %}
-              # {{ l | int if l | is_number else '–' }}
-            card_mod:
-              style: |
-                {% set l = states('sensor.vitesse_limite') %}
-                {% set v = states('sensor.peugeot_407_vitesse') | float(0) %}
-                {% set depasse = l | is_number and v > (l | float) + 3 %}
-                ha-card {
-                  aspect-ratio: 1;
-                  height: auto !important;
-                  width: 100%;
-                  margin: auto;
-                  border-radius: 50% !important;
-                  border: 12px solid {{ '#9e9e9e' if not l | is_number else '#c8102e' }} !important;
-                  background: white !important;
-                  {{ 'opacity: 0.35;' if not l | is_number }}
-                  --primary-text-color: #1a1a1a;
-                  color: #1a1a1a !important;
-                  font-family: 'Barlow Condensed', 'Roboto Condensed', sans-serif;
-                  font-size: 26px;
-                  font-weight: 800;
-                  text-align: center;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  box-shadow: none !important;
-                  {% if depasse %}animation: alerte 1s ease-in-out infinite;{% endif %}
-                }
-                @keyframes alerte {
-                  50% { box-shadow: 0 0 18px 4px rgba(255,40,40,0.9) !important; transform: scale(1.05); }
-                }
-            grid_options:
-              columns: 4
-              rows: 4
-          - type: custom:modern-circular-gauge
-            entity: sensor.peugeot_407_regime_moteur
-            name: Régime
-            min: 0
-            max: 5000
-            needle: true
-            smooth_segments: true
-            segments:
-              - from: 0
-                color: "#4caf50"
-              - from: 3500
-                color: "#ffc107"
-              - from: 4300
-                color: "#f44336"
-            grid_options:
-              columns: 4
-              rows: 3
-          - type: custom:modern-circular-gauge
-            entity: sensor.peugeot_407_temperature_liquide_de_refroidissement
-            name: Moteur
-            min: 0
-            max: 130
-            needle: true
-            smooth_segments: true
-            segments:
-              - from: 0
-                color: "#2196f3"
-              - from: 70
-                color: "#4caf50"
-              - from: 100
-                color: "#ffc107"
-              - from: 110
-                color: "#f44336"
-            grid_options:
-              columns: 4
-              rows: 3
-          - type: custom:modern-circular-gauge
-            entity: sensor.peugeot_407_tension_batterie
-            name: Batterie
-            min: 10
-            max: 16
-            needle: true
-            smooth_segments: true
-            segments:
-              - from: 10
-                color: "#f44336"
-              - from: 11.8
-                color: "#ffc107"
-              - from: 12.4
-                color: "#4caf50"
-              - from: 15
-                color: "#f44336"
-            grid_options:
-              columns: 4
-              rows: 3
-      - type: grid
-        cards:
-          - type: custom:mushroom-template-card
-            primary: Téléphone
-            icon: mdi:phone
-            icon_color: green
-            vertical: true
-            grid_options:
-              columns: 3
-              rows: 2
-            tap_action:
-              action: url
-              url_path: app://com.autochips.bluetooth
-          - type: custom:mushroom-template-card
-            primary: Waze
-            icon: mdi:waze
-            icon_color: light-blue
-            vertical: true
-            grid_options:
-              columns: 3
-              rows: 2
-            tap_action:
-              action: url
-              url_path: app://com.waze
-          - type: custom:mushroom-template-card
-            primary: Maps
-            icon: mdi:google-maps
-            icon_color: red
-            vertical: true
-            grid_options:
-              columns: 3
-              rows: 2
-            tap_action:
-              action: url
-              url_path: app://com.google.android.apps.maps
-          - type: custom:mushroom-template-card
-            primary: Deezer
-            icon: mdi:music
-            icon_color: purple
-            vertical: true
-            grid_options:
-              columns: 3
-              rows: 2
-            tap_action:
-              action: url
-              url_path: app://deezer.android.app
-          - type: custom:mushroom-template-card
-            primary: Radio
-            icon: mdi:radio
-            icon_color: orange
-            vertical: true
-            grid_options:
-              columns: 3
-              rows: 2
-            tap_action:
-              action: url
-              url_path: app://com.hcn.autoradio
-          - type: custom:mushroom-template-card
-            primary: YouTube
-            icon: mdi:youtube
-            icon_color: red
-            vertical: true
-            grid_options:
-              columns: 3
-              rows: 2
-            tap_action:
-              action: url
-              url_path: app://com.google.android.youtube
-          - type: custom:mushroom-template-card
-            primary: Twitch
-            icon: mdi:twitch
-            icon_color: deep-purple
-            vertical: true
-            grid_options:
-              columns: 3
-              rows: 2
-            tap_action:
-              action: url
-              url_path: app://tv.twitch.android.app
-          - type: custom:mushroom-template-card
-            primary: Chrome
-            icon: mdi:google-chrome
-            icon_color: amber
-            vertical: true
-            grid_options:
-              columns: 3
-              rows: 2
-            tap_action:
-              action: url
-              url_path: app://com.android.chrome
-          - type: custom:mushroom-template-card
-            primary: Play Store
-            icon: mdi:google-play
-            icon_color: teal
-            vertical: true
-            grid_options:
-              columns: 3
-              rows: 2
-            tap_action:
-              action: url
-              url_path: app://com.android.vending
-          - type: custom:mushroom-template-card
-            primary: DSP
-            icon: mdi:equalizer
-            icon_color: indigo
-            vertical: true
-            grid_options:
-              columns: 3
-              rows: 2
-            tap_action:
-              action: url
-              url_path: app://com.hcn.autoeq
-          - type: custom:mushroom-template-card
-            primary: Véhicule
-            icon: mdi:car-settings
-            icon_color: blue-grey
-            vertical: true
-            grid_options:
-              columns: 3
-              rows: 2
-            tap_action:
-              action: url
-              url_path: app://com.hcn.autosetting
-          - type: custom:mushroom-template-card
-            primary: Réglages
-            icon: mdi:cog
-            icon_color: grey
-            vertical: true
-            grid_options:
-              columns: 3
-              rows: 2
-            tap_action:
-              action: url
-              url_path: app://com.android.settings
-  - title: Conduite
-    path: conduite
-    icon: mdi:speedometer
-    type: sections
-    max_columns: 3
-    sections:
-      - type: grid
-        cards:
-          - type: heading
-            heading: Vitesse et régime
-            icon: mdi:speedometer
-          - type: custom:modern-circular-gauge
-            entity: sensor.peugeot_407_vitesse
-            name: Vitesse
-            min: 0
-            max: 220
-            needle: true
-            grid_options:
-              columns: 6
-              rows: 4
-          - type: custom:modern-circular-gauge
-            entity: sensor.peugeot_407_regime_moteur
-            name: Régime
-            min: 0
-            max: 5000
-            needle: true
-            smooth_segments: true
-            segments:
-              - from: 0
-                color: "#4caf50"
-              - from: 3500
-                color: "#ffc107"
-              - from: 4300
-                color: "#f44336"
-            grid_options:
-              columns: 6
-              rows: 4
-          - type: custom:modern-circular-gauge
-            entity: sensor.peugeot_407_charge_moteur
-            name: Charge
-            min: 0
-            max: 100
-            needle: true
-            smooth_segments: true
-            segments:
-              - from: 0
-                color: "#4caf50"
-              - from: 85
-                color: "#ffc107"
-            grid_options:
-              columns: 4
-              rows: 4
-          - type: custom:modern-circular-gauge
-            entity: sensor.pression_turbo
-            name: Turbo
-            min: -0.2
-            max: 1.6
-            needle: true
-            smooth_segments: true
-            segments:
-              - from: -0.2
-                color: "#9e9e9e"
-              - from: 0.3
-                color: "#4caf50"
-              - from: 1.2
-                color: "#ff9800"
-            grid_options:
-              columns: 4
-              rows: 4
-          - type: custom:modern-circular-gauge
-            entity: sensor.peugeot_407_debit_air
-            name: "Débit d'air"
-            min: 0
-            max: 150
-            needle: true
-            grid_options:
-              columns: 4
-              rows: 4
-      - type: grid
-        cards:
-          - type: heading
-            heading: En direct (15 min)
-            icon: mdi:chart-bell-curve-cumulative
-          - type: custom:mini-graph-card
-            name: Vitesse et régime
-            hours_to_show: 0.25
-            points_per_hour: 120
-            height: 100
-            line_width: 2
-            smoothing: true
-            show:
-              fill: fade
-              legend: true
-            entities:
-              - entity: sensor.peugeot_407_vitesse
-                name: Vitesse
-              - entity: sensor.peugeot_407_regime_moteur
-                name: Régime
-                y_axis: secondary
-          - type: custom:mini-graph-card
-            name: Charge et turbo
-            hours_to_show: 0.25
-            points_per_hour: 120
-            height: 100
-            line_width: 2
-            smoothing: true
-            show:
-              fill: fade
-              legend: true
-            entities:
-              - entity: sensor.peugeot_407_charge_moteur
-                name: Charge
-              - entity: sensor.pression_turbo
-                name: Turbo
-                y_axis: secondary
-          - type: custom:mini-graph-card
-            name: "Consommation (L/h, aussi à l'arrêt)"
-            hours_to_show: 0.25
-            points_per_hour: 120
-            height: 100
-            line_width: 2
-            smoothing: true
-            show:
-              fill: fade
-              legend: false
-            entities:
-              - entity: sensor.voiture_consommation_instantanee
-                name: L/h
-      - type: grid
-        cards:
-          - type: heading
-            heading: Records du jour
-            icon: mdi:trophy
-          - type: statistic
-            entity: sensor.pression_turbo
-            name: Turbo max
-            stat_type: max
-            period:
-              calendar:
-                period: day
-            grid_options:
-              columns: 6
-              rows: 2
-          - type: statistic
-            entity: sensor.peugeot_407_regime_moteur
-            name: Régime max
-            stat_type: max
-            period:
-              calendar:
-                period: day
-            grid_options:
-              columns: 6
-              rows: 2
-          - type: statistic
-            entity: sensor.peugeot_407_vitesse
-            name: Vitesse max
-            stat_type: max
-            period:
-              calendar:
-                period: day
-            grid_options:
-              columns: 6
-              rows: 2
-          - type: statistic
-            entity: sensor.peugeot_407_vitesse
-            name: Vitesse moyenne
-            stat_type: mean
-            period:
-              calendar:
-                period: day
-            grid_options:
-              columns: 6
-              rows: 2
-  - title: Moteur
-    path: moteur
-    icon: mdi:engine
-    type: sections
-    max_columns: 3
-    sections:
-      - type: grid
-        cards:
-          - type: heading
-            heading: Températures
-            icon: mdi:thermometer
-          - type: custom:modern-circular-gauge
-            entity: sensor.peugeot_407_temperature_liquide_de_refroidissement
-            name: Moteur
-            min: 0
-            max: 130
-            needle: true
-            smooth_segments: true
-            segments:
-              - from: 0
-                color: "#2196f3"
-              - from: 70
-                color: "#4caf50"
-              - from: 100
-                color: "#ffc107"
-              - from: 110
-                color: "#f44336"
-            grid_options:
-              columns: 6
-              rows: 4
-          - type: custom:modern-circular-gauge
-            entity: sensor.peugeot_407_temperature_air_admission
-            name: Air admission
-            min: -20
-            max: 80
-            needle: true
-            smooth_segments: true
-            segments:
-              - from: -20
-                color: "#2196f3"
-              - from: 0
-                color: "#4caf50"
-              - from: 50
-                color: "#ffc107"
-              - from: 65
-                color: "#f44336"
-            grid_options:
-              columns: 6
-              rows: 4
-          - type: custom:mini-graph-card
-            name: Températures
-            hours_to_show: 1
-            points_per_hour: 120
-            height: 100
-            line_width: 2
-            smoothing: true
-            show:
-              fill: fade
-              legend: true
-            entities:
-              - entity: sensor.peugeot_407_temperature_liquide_de_refroidissement
-                name: Moteur
-              - entity: sensor.peugeot_407_temperature_air_admission
-                name: Air
-                y_axis: secondary
-      - type: grid
-        cards:
-          - type: heading
-            heading: Suralimentation
-            icon: mdi:turbine
-          - type: custom:modern-circular-gauge
-            entity: sensor.pression_turbo
-            name: Turbo
-            min: -0.2
-            max: 1.6
-            needle: true
-            smooth_segments: true
-            segments:
-              - from: -0.2
-                color: "#9e9e9e"
-              - from: 0.3
-                color: "#4caf50"
-              - from: 1.2
-                color: "#ff9800"
-            grid_options:
-              columns: 6
-              rows: 4
-          - type: custom:modern-circular-gauge
-            entity: sensor.peugeot_407_debit_air
-            name: "Débit d'air"
-            min: 0
-            max: 150
-            needle: true
-            grid_options:
-              columns: 6
-              rows: 4
-          - type: custom:mini-graph-card
-            name: "Turbo et débit d'air"
-            hours_to_show: 1
-            points_per_hour: 120
-            height: 100
-            line_width: 2
-            smoothing: true
-            show:
-              fill: fade
-              legend: true
-            entities:
-              - entity: sensor.pression_turbo
-                name: Turbo
-              - entity: sensor.peugeot_407_debit_air
-                name: Débit
-                y_axis: secondary
-      - type: grid
-        cards:
-          - type: heading
-            heading: Injection
-            icon: mdi:needle
-          - type: custom:modern-circular-gauge
-            entity: sensor.pression_rampe
-            name: Rampe
-            min: 0
-            max: 1800
-            needle: true
-            smooth_segments: true
-            segments:
-              - from: 0
-                color: "#2196f3"
-              - from: 200
-                color: "#4caf50"
-              - from: 1400
-                color: "#ff9800"
-            grid_options:
-              columns: 6
-              rows: 4
-          - type: custom:modern-circular-gauge
-            entity: sensor.peugeot_407_pression_collecteur_admission
-            name: Admission
-            min: 0
-            max: 260
-            needle: true
-            grid_options:
-              columns: 6
-              rows: 4
-          - type: custom:mini-graph-card
-            name: Rampe et régime
-            hours_to_show: 1
-            points_per_hour: 120
-            height: 100
-            line_width: 2
-            smoothing: true
-            show:
-              fill: fade
-              legend: true
-            entities:
-              - entity: sensor.pression_rampe
-                name: Rampe
-              - entity: sensor.peugeot_407_regime_moteur
-                name: Régime
-                y_axis: secondary
-  - title: Batterie
-    path: batterie
-    icon: mdi:car-battery
-    type: sections
-    max_columns: 3
-    sections:
-      - type: grid
-        cards:
-          - type: heading
-            heading: Batterie
-            icon: mdi:car-battery
-          - type: custom:modern-circular-gauge
-            entity: sensor.peugeot_407_tension_batterie
-            name: Batterie
-            min: 10
-            max: 16
-            needle: true
-            smooth_segments: true
-            segments:
-              - from: 10
-                color: "#f44336"
-              - from: 11.8
-                color: "#ffc107"
-              - from: 12.4
-                color: "#4caf50"
-              - from: 15
-                color: "#f44336"
-            grid_options:
-              columns: 12
-              rows: 6
-      - type: grid
-        cards:
-          - type: heading
-            heading: Mesures
-            icon: mdi:chart-box-outline
-          - type: statistic
-            entity: sensor.peugeot_407_tension_batterie
-            name: "Min aujourd'hui"
-            stat_type: min
-            period:
-              calendar:
-                period: day
-            grid_options:
-              columns: 6
-              rows: 2
-          - type: statistic
-            entity: sensor.peugeot_407_tension_batterie
-            name: "Max aujourd'hui"
-            stat_type: max
-            period:
-              calendar:
-                period: day
-            grid_options:
-              columns: 6
-              rows: 2
-          - type: statistic
-            entity: sensor.peugeot_407_tension_batterie
-            name: Min semaine
-            stat_type: min
-            period:
-              calendar:
-                period: week
-            grid_options:
-              columns: 6
-              rows: 2
-          - type: statistic
-            entity: sensor.peugeot_407_tension_batterie
-            name: Max semaine
-            stat_type: max
-            period:
-              calendar:
-                period: week
-            grid_options:
-              columns: 6
-              rows: 2
-          - type: markdown
-            content: |
-              **Moteur tournant** : 13,5 à 14,8 V (alternateur OK).
+        chips:
+        - type: template
+          icon: mdi:skip-previous
+          tap_action:
+            action: perform-action
+            perform_action: notify.mobile_app_mycar
+            data:
+              message: command_media
+              data:
+                media_command: previous
+                media_package_name: deezer.android.app
+        - type: template
+          icon: '{{ ''mdi:pause'' if is_state(''sensor.mycar_media_session'', ''Playing'') else ''mdi:play'' }}'
+          icon_color: purple
+          tap_action:
+            action: perform-action
+            perform_action: notify.mobile_app_mycar
+            data:
+              message: command_media
+              data:
+                media_command: play_pause
+                media_package_name: deezer.android.app
+        - type: template
+          icon: mdi:skip-next
+          tap_action:
+            action: perform-action
+            perform_action: notify.mobile_app_mycar
+            data:
+              message: command_media
+              data:
+                media_command: next
+                media_package_name: deezer.android.app
+      grid_options:
+        columns: 12
+  - type: grid
+    cards:
+    - type: custom:modern-circular-gauge
+      entity: sensor.peugeot_407_vitesse
+      name: Vitesse
+      min: 0
+      max: 220
+      needle: true
+      grid_options:
+        columns: 8
+        rows: 4
+    - type: markdown
+      content: |
+        {% set l = states('sensor.vitesse_limite') %}
+        # {{ l | int if l | is_number else '–' }}
+      card_mod:
+        style: |
+          {% set l = states('sensor.vitesse_limite') %}
+          {% set v = states('sensor.peugeot_407_vitesse') | float(0) %}
+          {% set depasse = l | is_number and v > (l | float) + 3 %}
+          ha-card {
+            aspect-ratio: 1;
+            height: auto !important;
+            width: 100%;
+            margin: auto;
+            border-radius: 50% !important;
+            border: 12px solid {{ '#9e9e9e' if not l | is_number else '#c8102e' }} !important;
+            background: white !important;
+            {{ 'opacity: 0.35;' if not l | is_number }}
+            --primary-text-color: #1a1a1a;
+            color: #1a1a1a !important;
+            font-family: 'Barlow Condensed', 'Roboto Condensed', sans-serif;
+            font-size: 26px;
+            font-weight: 800;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: none !important;
+            {% if depasse %}animation: alerte 1s ease-in-out infinite;{% endif %}
+          }
+          @keyframes alerte {
+            50% { box-shadow: 0 0 18px 4px rgba(255,40,40,0.9) !important; transform: scale(1.05); }
+          }
+      grid_options:
+        columns: 4
+        rows: 4
+    - type: custom:modern-circular-gauge
+      entity: sensor.peugeot_407_regime_moteur
+      name: Régime
+      min: 0
+      max: 5000
+      needle: true
+      smooth_segments: true
+      segments:
+      - from: 0
+        color: '#4caf50'
+      - from: 3500
+        color: '#ffc107'
+      - from: 4300
+        color: '#f44336'
+      grid_options:
+        columns: 4
+        rows: 3
+    - type: custom:modern-circular-gauge
+      entity: sensor.peugeot_407_temperature_liquide_de_refroidissement
+      name: Moteur
+      min: 0
+      max: 130
+      needle: true
+      smooth_segments: true
+      segments:
+      - from: 0
+        color: '#2196f3'
+      - from: 70
+        color: '#4caf50'
+      - from: 100
+        color: '#ffc107'
+      - from: 110
+        color: '#f44336'
+      grid_options:
+        columns: 4
+        rows: 3
+    - type: custom:modern-circular-gauge
+      entity: sensor.peugeot_407_tension_batterie
+      name: Batterie
+      min: 10
+      max: 16
+      needle: true
+      smooth_segments: true
+      segments:
+      - from: 10
+        color: '#f44336'
+      - from: 11.8
+        color: '#ffc107'
+      - from: 12.4
+        color: '#4caf50'
+      - from: 15
+        color: '#f44336'
+      grid_options:
+        columns: 4
+        rows: 3
+  - type: grid
+    cards:
+    - type: custom:mushroom-template-card
+      primary: Téléphone
+      icon: mdi:phone
+      icon_color: green
+      vertical: true
+      grid_options:
+        columns: 3
+        rows: 2
+      tap_action:
+        action: url
+        url_path: app://com.autochips.bluetooth
+    - type: custom:mushroom-template-card
+      primary: Waze
+      icon: mdi:waze
+      icon_color: light-blue
+      vertical: true
+      grid_options:
+        columns: 3
+        rows: 2
+      tap_action:
+        action: url
+        url_path: app://com.waze
+    - type: custom:mushroom-template-card
+      primary: Maps
+      icon: mdi:google-maps
+      icon_color: red
+      vertical: true
+      grid_options:
+        columns: 3
+        rows: 2
+      tap_action:
+        action: url
+        url_path: app://com.google.android.apps.maps
+    - type: custom:mushroom-template-card
+      primary: Deezer
+      icon: mdi:music
+      icon_color: purple
+      vertical: true
+      grid_options:
+        columns: 3
+        rows: 2
+      tap_action:
+        action: url
+        url_path: app://deezer.android.app
+    - type: custom:mushroom-template-card
+      primary: Radio
+      icon: mdi:radio
+      icon_color: orange
+      vertical: true
+      grid_options:
+        columns: 3
+        rows: 2
+      tap_action:
+        action: url
+        url_path: app://com.hcn.autoradio
+    - type: custom:mushroom-template-card
+      primary: YouTube
+      icon: mdi:youtube
+      icon_color: red
+      vertical: true
+      grid_options:
+        columns: 3
+        rows: 2
+      tap_action:
+        action: url
+        url_path: app://com.google.android.youtube
+    - type: custom:mushroom-template-card
+      primary: Twitch
+      icon: mdi:twitch
+      icon_color: deep-purple
+      vertical: true
+      grid_options:
+        columns: 3
+        rows: 2
+      tap_action:
+        action: url
+        url_path: app://tv.twitch.android.app
+    - type: custom:mushroom-template-card
+      primary: Chrome
+      icon: mdi:google-chrome
+      icon_color: amber
+      vertical: true
+      grid_options:
+        columns: 3
+        rows: 2
+      tap_action:
+        action: url
+        url_path: app://com.android.chrome
+    - type: custom:mushroom-template-card
+      primary: Play Store
+      icon: mdi:google-play
+      icon_color: teal
+      vertical: true
+      grid_options:
+        columns: 3
+        rows: 2
+      tap_action:
+        action: url
+        url_path: app://com.android.vending
+    - type: custom:mushroom-template-card
+      primary: DSP
+      icon: mdi:equalizer
+      icon_color: indigo
+      vertical: true
+      grid_options:
+        columns: 3
+        rows: 2
+      tap_action:
+        action: url
+        url_path: app://com.hcn.autoeq
+    - type: custom:mushroom-template-card
+      primary: Véhicule
+      icon: mdi:car-settings
+      icon_color: blue-grey
+      vertical: true
+      grid_options:
+        columns: 3
+        rows: 2
+      tap_action:
+        action: url
+        url_path: app://com.hcn.autosetting
+    - type: custom:mushroom-template-card
+      primary: Réglages
+      icon: mdi:cog
+      icon_color: grey
+      vertical: true
+      grid_options:
+        columns: 3
+        rows: 2
+      tap_action:
+        action: url
+        url_path: app://com.android.settings
+- title: Conduite
+  path: conduite
+  icon: mdi:speedometer
+  type: sections
+  max_columns: 3
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Vitesse et régime
+      icon: mdi:speedometer
+    - type: custom:modern-circular-gauge
+      entity: sensor.peugeot_407_vitesse
+      name: Vitesse
+      min: 0
+      max: 220
+      needle: true
+      grid_options:
+        columns: 6
+        rows: 4
+    - type: custom:modern-circular-gauge
+      entity: sensor.peugeot_407_regime_moteur
+      name: Régime
+      min: 0
+      max: 5000
+      needle: true
+      smooth_segments: true
+      segments:
+      - from: 0
+        color: '#4caf50'
+      - from: 3500
+        color: '#ffc107'
+      - from: 4300
+        color: '#f44336'
+      grid_options:
+        columns: 6
+        rows: 4
+    - type: custom:modern-circular-gauge
+      entity: sensor.peugeot_407_charge_moteur
+      name: Charge
+      min: 0
+      max: 100
+      needle: true
+      smooth_segments: true
+      segments:
+      - from: 0
+        color: '#4caf50'
+      - from: 85
+        color: '#ffc107'
+      grid_options:
+        columns: 4
+        rows: 4
+    - type: custom:modern-circular-gauge
+      entity: sensor.pression_turbo
+      name: Turbo
+      min: -0.2
+      max: 1.6
+      needle: true
+      smooth_segments: true
+      segments:
+      - from: -0.2
+        color: '#9e9e9e'
+      - from: 0.3
+        color: '#4caf50'
+      - from: 1.2
+        color: '#ff9800'
+      grid_options:
+        columns: 4
+        rows: 4
+    - type: custom:modern-circular-gauge
+      entity: sensor.peugeot_407_debit_air
+      name: Débit d'air
+      min: 0
+      max: 150
+      needle: true
+      grid_options:
+        columns: 4
+        rows: 4
+  - type: grid
+    cards:
+    - type: heading
+      heading: En direct (15 min)
+      icon: mdi:chart-bell-curve-cumulative
+    - type: custom:mini-graph-card
+      name: Vitesse et régime
+      hours_to_show: 0.25
+      points_per_hour: 120
+      height: 100
+      line_width: 2
+      smoothing: true
+      show:
+        fill: fade
+        legend: true
+      entities:
+      - entity: sensor.peugeot_407_vitesse
+        name: Vitesse
+      - entity: sensor.peugeot_407_regime_moteur
+        name: Régime
+        y_axis: secondary
+    - type: custom:mini-graph-card
+      name: Charge et turbo
+      hours_to_show: 0.25
+      points_per_hour: 120
+      height: 100
+      line_width: 2
+      smoothing: true
+      show:
+        fill: fade
+        legend: true
+      entities:
+      - entity: sensor.peugeot_407_charge_moteur
+        name: Charge
+      - entity: sensor.pression_turbo
+        name: Turbo
+        y_axis: secondary
+    - type: custom:mini-graph-card
+      name: Consommation (L/h, aussi à l'arrêt)
+      hours_to_show: 0.25
+      points_per_hour: 120
+      height: 100
+      line_width: 2
+      smoothing: true
+      show:
+        fill: fade
+        legend: false
+      entities:
+      - entity: sensor.voiture_consommation_instantanee
+        name: L/h
+  - type: grid
+    cards:
+    - type: heading
+      heading: Records du jour
+      icon: mdi:trophy
+    - type: statistic
+      entity: sensor.pression_turbo
+      name: Turbo max
+      stat_type: max
+      period:
+        calendar:
+          period: day
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: statistic
+      entity: sensor.peugeot_407_regime_moteur
+      name: Régime max
+      stat_type: max
+      period:
+        calendar:
+          period: day
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: statistic
+      entity: sensor.peugeot_407_vitesse
+      name: Vitesse max
+      stat_type: max
+      period:
+        calendar:
+          period: day
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: statistic
+      entity: sensor.peugeot_407_vitesse
+      name: Vitesse moyenne
+      stat_type: mean
+      period:
+        calendar:
+          period: day
+      grid_options:
+        columns: 6
+        rows: 2
+- title: Moteur
+  path: moteur
+  icon: mdi:engine
+  type: sections
+  max_columns: 3
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Températures
+      icon: mdi:thermometer
+    - type: custom:modern-circular-gauge
+      entity: sensor.peugeot_407_temperature_liquide_de_refroidissement
+      name: Moteur
+      min: 0
+      max: 130
+      needle: true
+      smooth_segments: true
+      segments:
+      - from: 0
+        color: '#2196f3'
+      - from: 70
+        color: '#4caf50'
+      - from: 100
+        color: '#ffc107'
+      - from: 110
+        color: '#f44336'
+      grid_options:
+        columns: 6
+        rows: 4
+    - type: custom:modern-circular-gauge
+      entity: sensor.peugeot_407_temperature_air_admission
+      name: Air admission
+      min: -20
+      max: 80
+      needle: true
+      smooth_segments: true
+      segments:
+      - from: -20
+        color: '#2196f3'
+      - from: 0
+        color: '#4caf50'
+      - from: 50
+        color: '#ffc107'
+      - from: 65
+        color: '#f44336'
+      grid_options:
+        columns: 6
+        rows: 4
+    - type: custom:mini-graph-card
+      name: Températures
+      hours_to_show: 1
+      points_per_hour: 120
+      height: 100
+      line_width: 2
+      smoothing: true
+      show:
+        fill: fade
+        legend: true
+      entities:
+      - entity: sensor.peugeot_407_temperature_liquide_de_refroidissement
+        name: Moteur
+      - entity: sensor.peugeot_407_temperature_air_admission
+        name: Air
+        y_axis: secondary
+  - type: grid
+    cards:
+    - type: heading
+      heading: Suralimentation
+      icon: mdi:turbine
+    - type: custom:modern-circular-gauge
+      entity: sensor.pression_turbo
+      name: Turbo
+      min: -0.2
+      max: 1.6
+      needle: true
+      smooth_segments: true
+      segments:
+      - from: -0.2
+        color: '#9e9e9e'
+      - from: 0.3
+        color: '#4caf50'
+      - from: 1.2
+        color: '#ff9800'
+      grid_options:
+        columns: 6
+        rows: 4
+    - type: custom:modern-circular-gauge
+      entity: sensor.peugeot_407_debit_air
+      name: Débit d'air
+      min: 0
+      max: 150
+      needle: true
+      grid_options:
+        columns: 6
+        rows: 4
+    - type: custom:mini-graph-card
+      name: Turbo et débit d'air
+      hours_to_show: 1
+      points_per_hour: 120
+      height: 100
+      line_width: 2
+      smoothing: true
+      show:
+        fill: fade
+        legend: true
+      entities:
+      - entity: sensor.pression_turbo
+        name: Turbo
+      - entity: sensor.peugeot_407_debit_air
+        name: Débit
+        y_axis: secondary
+  - type: grid
+    cards:
+    - type: heading
+      heading: Injection
+      icon: mdi:needle
+    - type: custom:modern-circular-gauge
+      entity: sensor.pression_rampe
+      name: Rampe
+      min: 0
+      max: 1800
+      needle: true
+      smooth_segments: true
+      segments:
+      - from: 0
+        color: '#2196f3'
+      - from: 200
+        color: '#4caf50'
+      - from: 1400
+        color: '#ff9800'
+      grid_options:
+        columns: 6
+        rows: 4
+    - type: custom:modern-circular-gauge
+      entity: sensor.peugeot_407_pression_collecteur_admission
+      name: Admission
+      min: 0
+      max: 260
+      needle: true
+      grid_options:
+        columns: 6
+        rows: 4
+    - type: custom:mini-graph-card
+      name: Rampe et régime
+      hours_to_show: 1
+      points_per_hour: 120
+      height: 100
+      line_width: 2
+      smoothing: true
+      show:
+        fill: fade
+        legend: true
+      entities:
+      - entity: sensor.pression_rampe
+        name: Rampe
+      - entity: sensor.peugeot_407_regime_moteur
+        name: Régime
+        y_axis: secondary
+- title: Batterie
+  path: batterie
+  icon: mdi:car-battery
+  type: sections
+  max_columns: 3
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Batterie
+      icon: mdi:car-battery
+    - type: custom:modern-circular-gauge
+      entity: sensor.peugeot_407_tension_batterie
+      name: Batterie
+      min: 10
+      max: 16
+      needle: true
+      smooth_segments: true
+      segments:
+      - from: 10
+        color: '#f44336'
+      - from: 11.8
+        color: '#ffc107'
+      - from: 12.4
+        color: '#4caf50'
+      - from: 15
+        color: '#f44336'
+      grid_options:
+        columns: 12
+        rows: 6
+  - type: grid
+    cards:
+    - type: heading
+      heading: Mesures
+      icon: mdi:chart-box-outline
+    - type: statistic
+      entity: sensor.peugeot_407_tension_batterie
+      name: Min aujourd'hui
+      stat_type: min
+      period:
+        calendar:
+          period: day
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: statistic
+      entity: sensor.peugeot_407_tension_batterie
+      name: Max aujourd'hui
+      stat_type: max
+      period:
+        calendar:
+          period: day
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: statistic
+      entity: sensor.peugeot_407_tension_batterie
+      name: Min semaine
+      stat_type: min
+      period:
+        calendar:
+          period: week
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: statistic
+      entity: sensor.peugeot_407_tension_batterie
+      name: Max semaine
+      stat_type: max
+      period:
+        calendar:
+          period: week
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: markdown
+      content: |
+        **Moteur tournant** : 13,5 à 14,8 V (alternateur OK).
 
-              **Moteur coupé** : 12,4 V et plus = chargée, sous 12 V = à recharger.
+        **Moteur coupé** : 12,4 V et plus = chargée, sous 12 V = à recharger.
 
-              **Au démarrage** : plus de 10 V = batterie en forme, moins de 9,6 V = à remplacer.
-      - type: grid
-        cards:
-          - type: heading
-            heading: Sur 24 h
-            icon: mdi:chart-line
-          - type: custom:mini-graph-card
-            name: Tension
-            hours_to_show: 24
-            points_per_hour: 12
-            height: 220
-            line_width: 2
-            smoothing: true
-            show:
-              fill: fade
-              legend: false
-            entities:
-              - entity: sensor.peugeot_407_tension_batterie
-                name: Tension
-  - title: Diagnostic
-    path: diagnostic
-    icon: mdi:car-wrench
-    type: sections
-    max_columns: 3
-    sections:
-      - type: grid
-        cards:
-          - type: heading
-            heading: Défauts moteur
-            icon: mdi:engine-outline
-          - type: entities
-            show_header_toggle: false
-            entities:
-              - entity: binary_sensor.peugeot_407_voyant_moteur
-                name: Voyant moteur
-              - entity: sensor.peugeot_407_codes_defaut
-                name: Codes défaut
-              - entity: sensor.peugeot_407_defauts_en_attente
-                name: Défauts en attente
-              - entity: sensor.peugeot_407_distance_avec_voyant_defaut
-                name: Distance avec voyant allumé
-          - type: custom:mushroom-template-card
-            primary: Effacer les défauts
-            secondary: Contact mis, moteur arrêté
-            icon: mdi:broom
-            icon_color: red
-            tap_action:
-              action: perform-action
-              perform_action: input_button.press
-              target:
-                entity_id: input_button.peugeot_407_effacer_les_defauts
-              confirmation:
-                text: Effacer les codes défaut ? Les tests antipollution seront remis à zéro et le voyant se rallumera si le défaut persiste.
-      - type: grid
-        cards:
-          - type: heading
-            heading: Codes
-            icon: mdi:alert-circle-outline
-          - type: markdown
-            content: |
-              {% set codes = state_attr('sensor.peugeot_407_nombre_de_defauts', 'codes') or [] %}
-              {% set pending = state_attr('sensor.peugeot_407_defauts_en_attente', 'codes') or [] %}
-              {% for c in codes %}
-              - **{{ c.code }}** — {{ c.description }}
-              {% endfor %}
-              {% for c in pending %}
-              - *{{ c.code }} (en attente)* — {{ c.description }}
-              {% endfor %}
-              {% if not codes and not pending %}Aucun défaut mémorisé ✅{% endif %}
-              {% set clear = state_attr('sensor.peugeot_407_nombre_de_defauts', 'dernier_effacement') %}
-              {% if clear is mapping %}
+        **Au démarrage** : plus de 10 V = batterie en forme, moins de 9,6 V = à remplacer.
+  - type: grid
+    cards:
+    - type: heading
+      heading: Sur 24 h
+      icon: mdi:chart-line
+    - type: custom:mini-graph-card
+      name: Tension
+      hours_to_show: 24
+      points_per_hour: 12
+      height: 220
+      line_width: 2
+      smoothing: true
+      show:
+        fill: fade
+        legend: false
+      entities:
+      - entity: sensor.peugeot_407_tension_batterie
+        name: Tension
+- title: Diagnostic
+  path: diagnostic
+  icon: mdi:car-wrench
+  type: sections
+  max_columns: 3
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Défauts moteur
+      icon: mdi:engine-outline
+    - type: entities
+      show_header_toggle: false
+      entities:
+      - entity: binary_sensor.peugeot_407_voyant_moteur
+        name: Voyant moteur
+      - entity: sensor.peugeot_407_codes_defaut
+        name: Codes défaut
+      - entity: sensor.peugeot_407_defauts_en_attente
+        name: Défauts en attente
+      - entity: sensor.peugeot_407_distance_avec_voyant_defaut
+        name: Distance avec voyant allumé
+    - type: custom:mushroom-template-card
+      primary: Effacer les défauts
+      secondary: Contact mis, moteur arrêté
+      icon: mdi:broom
+      icon_color: red
+      tap_action:
+        action: perform-action
+        perform_action: input_button.press
+        target:
+          entity_id: input_button.peugeot_407_effacer_les_defauts
+        confirmation:
+          text: Effacer les codes défaut ? Les tests antipollution seront remis à zéro et le voyant se rallumera si le défaut persiste.
+  - type: grid
+    cards:
+    - type: heading
+      heading: Codes
+      icon: mdi:alert-circle-outline
+    - type: markdown
+      content: |
+        {% set codes = state_attr('sensor.peugeot_407_nombre_de_defauts', 'codes') or [] %}
+        {% set pending = state_attr('sensor.peugeot_407_defauts_en_attente', 'codes') or [] %}
+        {% for c in codes %}
+        - **{{ c.code }}** — {{ c.description }}
+        {% endfor %}
+        {% for c in pending %}
+        - *{{ c.code }} (en attente)* — {{ c.description }}
+        {% endfor %}
+        {% if not codes and not pending %}Aucun défaut mémorisé ✅{% endif %}
+        {% set clear = state_attr('sensor.peugeot_407_nombre_de_defauts', 'dernier_effacement') %}
+        {% if clear is mapping %}
 
-              _Dernier effacement : {{ clear.message }}_
-              {% endif %}
-      - type: grid
-        cards:
-          - type: heading
-            heading: Tests antipollution
-            icon: mdi:clipboard-check-outline
-          - type: markdown
-            content: |
-              {% set tests = state_attr('sensor.peugeot_407_tests_antipollution_incomplets', 'tests') or [] %}
-              {% for t in tests %}
-              - {{ '✅' if t.complete else '⏳' }} {{ t.name }}
-              {% endfor %}
-              {% if not tests %}Pas encore lu{% endif %}
-  - title: Historique
-    path: historique
-    icon: mdi:chart-line
-    type: sections
-    max_columns: 3
-    sections:
-      - type: grid
-        cards:
-          - type: heading
-            heading: Dernières 24 h
-            icon: mdi:history
-          - type: custom:mini-graph-card
-            name: Vitesse
-            hours_to_show: 24
-            points_per_hour: 12
-            height: 100
-            line_width: 2
-            smoothing: true
-            show:
-              fill: fade
-              legend: false
-            entities:
-              - entity: sensor.peugeot_407_vitesse
-                name: Vitesse
-          - type: custom:mini-graph-card
-            name: Régime
-            hours_to_show: 24
-            points_per_hour: 12
-            height: 100
-            line_width: 2
-            smoothing: true
-            show:
-              fill: fade
-              legend: false
-            entities:
-              - entity: sensor.peugeot_407_regime_moteur
-                name: Régime
-      - type: grid
-        cards:
-          - type: heading
-            heading: Dernières 24 h
-            icon: mdi:history
-          - type: custom:mini-graph-card
-            name: Température moteur
-            hours_to_show: 24
-            points_per_hour: 12
-            height: 100
-            line_width: 2
-            smoothing: true
-            show:
-              fill: fade
-              legend: false
-            entities:
-              - entity: sensor.peugeot_407_temperature_liquide_de_refroidissement
-                name: Moteur
-          - type: custom:mini-graph-card
-            name: Turbo
-            hours_to_show: 24
-            points_per_hour: 12
-            height: 100
-            line_width: 2
-            smoothing: true
-            show:
-              fill: fade
-              legend: false
-            entities:
-              - entity: sensor.pression_turbo
-                name: Turbo
-      - type: grid
-        cards:
-          - type: heading
-            heading: Records de la semaine
-            icon: mdi:trophy
-          - type: statistic
-            entity: sensor.peugeot_407_vitesse
-            name: Vitesse max
-            stat_type: max
-            period:
-              calendar:
-                period: week
-            grid_options:
-              columns: 6
-              rows: 2
-          - type: statistic
-            entity: sensor.peugeot_407_regime_moteur
-            name: Régime max
-            stat_type: max
-            period:
-              calendar:
-                period: week
-            grid_options:
-              columns: 6
-              rows: 2
-          - type: statistic
-            entity: sensor.pression_turbo
-            name: Turbo max
-            stat_type: max
-            period:
-              calendar:
-                period: week
-            grid_options:
-              columns: 6
-              rows: 2
-          - type: statistic
-            entity: sensor.peugeot_407_temperature_liquide_de_refroidissement
-            name: Température max
-            stat_type: max
-            period:
-              calendar:
-                period: week
-            grid_options:
-              columns: 6
-              rows: 2
-  - title: Mesures
-    path: mesures
-    icon: mdi:format-list-bulleted
-    type: sections
-    max_columns: 2
-    sections:
-      - type: grid
-        cards:
-          - type: heading
-            heading: Mesures de la voiture
-            icon: mdi:format-list-bulleted
-          - type: entities
-            show_header_toggle: false
-            entities:
-              - entity: sensor.peugeot_407_vitesse
-                name: Vitesse
-              - entity: sensor.peugeot_407_regime_moteur
-                name: Régime moteur
-              - entity: sensor.peugeot_407_charge_moteur
-                name: Charge moteur
-              - entity: sensor.peugeot_407_debit_air
-                name: "Débit d'air"
-              - entity: sensor.peugeot_407_pression_collecteur_admission
-                name: "Pression d'admission"
-              - entity: sensor.peugeot_407_temperature_liquide_de_refroidissement
-                name: Température moteur
-              - entity: sensor.peugeot_407_temperature_air_admission
-                name: Température air admission
-              - entity: sensor.peugeot_407_pression_rampe_injection
-                name: Pression rampe (kPa)
-              - entity: sensor.peugeot_407_tension_batterie
-                name: Tension batterie
-              - entity: sensor.peugeot_407_distance_avec_voyant_defaut
-                name: Distance avec voyant allumé
-      - type: grid
-        cards:
-          - type: heading
-            heading: Calculées
-            icon: mdi:calculator-variant
-          - type: entities
-            show_header_toggle: false
-            entities:
-              - entity: sensor.pression_turbo
-                name: Pression turbo
-              - entity: sensor.pression_rampe
-                name: Pression rampe (bar)
-              - entity: sensor.vitesse_limite
-                name: Vitesse limite (OpenStreetMap)
-              - entity: sensor.voiture_consommation_instantanee
-                name: Consommation (L/h)
-              - entity: sensor.voiture_consommation_aux_100
-                name: Consommation (L/100 km)
-              - entity: sensor.voiture_kilometrage
-                name: Kilométrage
-  - title: Carnet
-    path: carnet
-    icon: mdi:notebook
-    type: sections
-    max_columns: 3
-    sections:
-      - type: grid
-        cards:
-          - type: heading
-            heading: Trajet
-            icon: mdi:map-marker-path
-          - type: custom:mushroom-template-card
-            icon: mdi:car-arrow-right
-            icon_color: "{% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}{{ 'green' if t is mapping and t.active else 'grey' }}"
-            primary: "{% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}{{ ('Trajet en cours' if t.active else 'Dernier trajet') if t is mapping else 'Aucun trajet' }}"
-            secondary: "{% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}{% if t is mapping %}{{ t.distance_km | round(1) }} km · {{ t.duration_min | round(0) | int }} min · {{ t.avg_kmh | round(0) | int }} km/h moy. · max {{ t.max_kmh | int }}{% endif %}"
-            grid_options:
-              columns: 12
-          - type: custom:mushroom-template-card
-            icon: mdi:gas-station
-            icon_color: blue
-            primary: "{{ states('sensor.voiture_consommation_aux_100') ~ ' L/100' if has_value('sensor.voiture_consommation_aux_100') else 'Consommation' }}"
-            secondary: "{{ states('sensor.voiture_consommation_instantanee') ~ ' L/h' if has_value('sensor.voiture_consommation_instantanee') else 'à l’arrêt' }}"
-            grid_options:
-              columns: 6
-          - type: custom:mushroom-template-card
-            icon: mdi:leaf
-            icon_color: "{% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}{% set s = t.eco_score if t is mapping else 0 %}{{ 'green' if s >= 80 else ('amber' if s >= 60 else 'red') }}"
-            primary: "{% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}Éco {{ t.eco_score if t is mapping else '—' }}/100"
-            secondary: "{% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}{% if t is mapping %}{{ t.harsh_accel }} accél. · {{ t.harsh_brake }} frein.{% endif %}"
-            grid_options:
-              columns: 6
-          - type: markdown
-            content: |
-              {% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}
-              {% if t is mapping %}
-              {% set c = states('input_text.voiture_correction_conso') | float(1) %}
-              {% set prix = states('input_number.voiture_prix_gasoil') | float(0) %}
-              **Carburant** : {{ (t.fuel_l * c) | round(2) }} L{% if t.l100 %} · {{ (t.l100 * c) | round(1) }} L/100{% endif %}{% if prix > 0 %} · {{ (t.fuel_l * c * prix) | round(2) }} €{% endif %}
-              {% if t.crank_v %}
+        _Dernier effacement : {{ clear.message }}_
+        {% endif %}
+  - type: grid
+    cards:
+    - type: heading
+      heading: Tests antipollution
+      icon: mdi:clipboard-check-outline
+    - type: markdown
+      content: |
+        {% set tests = state_attr('sensor.peugeot_407_tests_antipollution_incomplets', 'tests') or [] %}
+        {% for t in tests %}
+        - {{ '✅' if t.complete else '⏳' }} {{ t.name }}
+        {% endfor %}
+        {% if not tests %}Pas encore lu{% endif %}
+- title: Historique
+  path: historique
+  icon: mdi:chart-line
+  type: sections
+  max_columns: 3
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Dernières 24 h
+      icon: mdi:history
+    - type: custom:mini-graph-card
+      name: Vitesse
+      hours_to_show: 24
+      points_per_hour: 12
+      height: 100
+      line_width: 2
+      smoothing: true
+      show:
+        fill: fade
+        legend: false
+      entities:
+      - entity: sensor.peugeot_407_vitesse
+        name: Vitesse
+    - type: custom:mini-graph-card
+      name: Régime
+      hours_to_show: 24
+      points_per_hour: 12
+      height: 100
+      line_width: 2
+      smoothing: true
+      show:
+        fill: fade
+        legend: false
+      entities:
+      - entity: sensor.peugeot_407_regime_moteur
+        name: Régime
+  - type: grid
+    cards:
+    - type: heading
+      heading: Dernières 24 h
+      icon: mdi:history
+    - type: custom:mini-graph-card
+      name: Température moteur
+      hours_to_show: 24
+      points_per_hour: 12
+      height: 100
+      line_width: 2
+      smoothing: true
+      show:
+        fill: fade
+        legend: false
+      entities:
+      - entity: sensor.peugeot_407_temperature_liquide_de_refroidissement
+        name: Moteur
+    - type: custom:mini-graph-card
+      name: Turbo
+      hours_to_show: 24
+      points_per_hour: 12
+      height: 100
+      line_width: 2
+      smoothing: true
+      show:
+        fill: fade
+        legend: false
+      entities:
+      - entity: sensor.pression_turbo
+        name: Turbo
+  - type: grid
+    cards:
+    - type: heading
+      heading: Records de la semaine
+      icon: mdi:trophy
+    - type: statistic
+      entity: sensor.peugeot_407_vitesse
+      name: Vitesse max
+      stat_type: max
+      period:
+        calendar:
+          period: week
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: statistic
+      entity: sensor.peugeot_407_regime_moteur
+      name: Régime max
+      stat_type: max
+      period:
+        calendar:
+          period: week
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: statistic
+      entity: sensor.pression_turbo
+      name: Turbo max
+      stat_type: max
+      period:
+        calendar:
+          period: week
+      grid_options:
+        columns: 6
+        rows: 2
+    - type: statistic
+      entity: sensor.peugeot_407_temperature_liquide_de_refroidissement
+      name: Température max
+      stat_type: max
+      period:
+        calendar:
+          period: week
+      grid_options:
+        columns: 6
+        rows: 2
+- title: Mesures
+  path: mesures
+  icon: mdi:format-list-bulleted
+  type: sections
+  max_columns: 2
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Mesures de la voiture
+      icon: mdi:format-list-bulleted
+    - type: entities
+      show_header_toggle: false
+      entities:
+      - entity: sensor.peugeot_407_vitesse
+        name: Vitesse
+      - entity: sensor.peugeot_407_regime_moteur
+        name: Régime moteur
+      - entity: sensor.peugeot_407_charge_moteur
+        name: Charge moteur
+      - entity: sensor.peugeot_407_debit_air
+        name: Débit d'air
+      - entity: sensor.peugeot_407_pression_collecteur_admission
+        name: Pression d'admission
+      - entity: sensor.peugeot_407_temperature_liquide_de_refroidissement
+        name: Température moteur
+      - entity: sensor.peugeot_407_temperature_air_admission
+        name: Température air admission
+      - entity: sensor.peugeot_407_pression_rampe_injection
+        name: Pression rampe (kPa)
+      - entity: sensor.peugeot_407_tension_batterie
+        name: Tension batterie
+      - entity: sensor.peugeot_407_distance_avec_voyant_defaut
+        name: Distance avec voyant allumé
+  - type: grid
+    cards:
+    - type: heading
+      heading: Calculées
+      icon: mdi:calculator-variant
+    - type: entities
+      show_header_toggle: false
+      entities:
+      - entity: sensor.pression_turbo
+        name: Pression turbo
+      - entity: sensor.pression_rampe
+        name: Pression rampe (bar)
+      - entity: sensor.vitesse_limite
+        name: Vitesse limite (OpenStreetMap)
+      - entity: sensor.voiture_consommation_instantanee
+        name: Consommation (L/h)
+      - entity: sensor.voiture_consommation_aux_100
+        name: Consommation (L/100 km)
+      - entity: sensor.voiture_kilometrage
+        name: Kilométrage
+- title: Carnet
+  path: carnet
+  icon: mdi:notebook
+  type: sections
+  max_columns: 3
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Trajet
+      icon: mdi:map-marker-path
+    - type: custom:mushroom-template-card
+      icon: mdi:car-arrow-right
+      icon_color: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{{ ''green'' if t is mapping and t.active else ''grey'' }}'
+      primary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{{ (''Trajet en cours'' if t.active else ''Dernier trajet'') if t is mapping else ''Aucun trajet'' }}'
+      secondary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{% if t is mapping %}{{ t.distance_km | round(1) }} km · {{ t.duration_min | round(0) | int }} min · {{ t.avg_kmh | round(0) | int }} km/h moy. · max {{ t.max_kmh | int }}{% endif %}'
+      grid_options:
+        columns: 12
+    - type: custom:mushroom-template-card
+      icon: mdi:gas-station
+      icon_color: blue
+      primary: '{{ states(''sensor.voiture_consommation_aux_100'') ~ '' L/100'' if has_value(''sensor.voiture_consommation_aux_100'') else ''Consommation'' }}'
+      secondary: '{{ states(''sensor.voiture_consommation_instantanee'') ~ '' L/h'' if has_value(''sensor.voiture_consommation_instantanee'') else ''à l’arrêt'' }}'
+      grid_options:
+        columns: 6
+    - type: custom:mushroom-template-card
+      icon: mdi:leaf
+      icon_color: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{% set s = t.eco_score if t is mapping else 0 %}{{ ''green'' if s >= 80 else (''amber'' if s >= 60 else ''red'') }}'
+      primary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}Éco {{ t.eco_score if t is mapping else ''—'' }}/100'
+      secondary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{% if t is mapping %}{{ t.harsh_accel }} accél. · {{ t.harsh_brake }} frein.{% endif %}'
+      grid_options:
+        columns: 6
+    - type: markdown
+      content: |
+        {% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}
+        {% if t is mapping %}
+        {% set c = states('input_text.voiture_correction_conso') | float(1) %}
+        {% set prix = states('input_number.voiture_prix_gasoil') | float(0) %}
+        **Carburant** : {{ (t.fuel_l * c) | round(2) }} L{% if t.l100 %} · {{ (t.l100 * c) | round(1) }} L/100{% endif %}{% if prix > 0 %} · {{ (t.fuel_l * c * prix) | round(2) }} €{% endif %}
+        {% if t.crank_v %}
 
-              **Batterie au démarrage** : {{ t.crank_v }} V {{ '✅' if t.crank_v >= 10 else '⚠️' }}{% endif %}{% if t.t0_100 %} · **0-100** : {{ t.t0_100 }} s{% endif %}{% if t.t80_120 %} · **80-120** : {{ t.t80_120 }} s{% endif %}
-              {% else %}Aucun trajet pour l'instant : il apparaîtra au prochain démarrage du moteur.{% endif %}
-          - type: heading
-            heading: 10 derniers trajets
-            icon: mdi:history
-          - type: markdown
-            content: |
-              {% set trajets = (state_attr('sensor.voiture_historique_des_trajets', 'trajets') or []) | reverse | list %}
-              {% if trajets %}
-              | Date | Km | Min | L/100 | € | Éco |
-              |:--|--:|--:|--:|--:|--:|
-              {% for t in trajets -%}
-              | {{ as_timestamp(t.debut) | timestamp_custom('%d/%m %H:%M') }} | {{ t.distance_km | round(1) }} | {{ t.duree_min | round(0) | int }} | {{ t.l100 if t.l100 else '—' }} | {{ t.cout }} | {{ t.eco_score }} |
-              {% endfor %}
-              {% else %}Aucun trajet enregistré pour l'instant.{% endif %}
-      - type: grid
-        cards:
-          - type: heading
-            heading: Entretien
-            icon: mdi:wrench
-          - type: custom:mushroom-template-card
-            icon: mdi:counter
-            icon_color: blue-grey
-            primary: "{{ states('input_number.voiture_kilometrage') | float(0) | round(0) | int }} km"
-            secondary: "Kilométrage · appuyer pour modifier l'historique"
-            tap_action:
-              action: navigate
-              navigation_path: entretien
-            grid_options:
-              columns: 12
-          - type: custom:mushroom-template-card
-            icon: mdi:oil
-            icon_color: "{% set km = states('sensor.voiture_vidange') | float(0) %}{% set saisi = states('input_number.voiture_vidange_km') | float(0) > 0 %}{% set j = state_attr('sensor.voiture_vidange', 'jours_restants') %}{{ 'grey' if not saisi else ('red' if km < 0 or (j is number and j < 0) else ('orange' if km < 1000 or (j is number and j < 30) else 'green')) }}"
-            primary: Vidange
-            secondary: "{% set km = states('sensor.voiture_vidange') | float(0) %}{% set j = state_attr('sensor.voiture_vidange', 'jours_restants') %}{% if states('input_number.voiture_vidange_km') | float(0) == 0 %}À renseigner{% elif km < 0 %}Dépassée de {{ (-km) | int }} km{% else %}Dans {{ km | int }} km{{ ' ou ' ~ j ~ ' j' if j is number }}{% endif %}"
-            tap_action:
-              action: navigate
-              navigation_path: entretien
-            grid_options:
-              columns: 6
-          - type: custom:mushroom-template-card
-            icon: mdi:cog-sync
-            icon_color: "{% set km = states('sensor.voiture_distribution') | float(0) %}{% set saisi = states('input_number.voiture_distribution_km') | float(0) > 0 %}{{ 'grey' if not saisi else ('red' if km < 0 else ('orange' if km < 10000 else 'green')) }}"
-            primary: Distribution
-            secondary: "{% set km = states('sensor.voiture_distribution') | float(0) %}{% if states('input_number.voiture_distribution_km') | float(0) == 0 %}À renseigner{% elif km < 0 %}Dépassé de {{ (-km) | int }} km{% else %}Dans {{ km | int }} km{% endif %}"
-            tap_action:
-              action: navigate
-              navigation_path: entretien
-            grid_options:
-              columns: 6
-          - type: custom:mushroom-template-card
-            icon: mdi:filter
-            icon_color: "{% set km = states('sensor.voiture_filtre_a_gasoil') | float(0) %}{% set saisi = states('input_number.voiture_filtre_gasoil_km') | float(0) > 0 %}{{ 'grey' if not saisi else ('red' if km < 0 else ('orange' if km < 3000 else 'green')) }}"
-            primary: Filtre à gasoil
-            secondary: "{% set km = states('sensor.voiture_filtre_a_gasoil') | float(0) %}{% if states('input_number.voiture_filtre_gasoil_km') | float(0) == 0 %}À renseigner{% elif km < 0 %}Dépassé de {{ (-km) | int }} km{% else %}Dans {{ km | int }} km{% endif %}"
-            tap_action:
-              action: navigate
-              navigation_path: entretien
-            grid_options:
-              columns: 6
-          - type: custom:mushroom-template-card
-            icon: mdi:air-filter
-            icon_color: "{% set km = states('sensor.voiture_filtre_a_air') | float(0) %}{% set saisi = states('input_number.voiture_filtre_air_km') | float(0) > 0 %}{{ 'grey' if not saisi else ('red' if km < 0 else ('orange' if km < 3000 else 'green')) }}"
-            primary: Filtre à air
-            secondary: "{% set km = states('sensor.voiture_filtre_a_air') | float(0) %}{% if states('input_number.voiture_filtre_air_km') | float(0) == 0 %}À renseigner{% elif km < 0 %}Dépassé de {{ (-km) | int }} km{% else %}Dans {{ km | int }} km{% endif %}"
-            tap_action:
-              action: navigate
-              navigation_path: entretien
-            grid_options:
-              columns: 6
-          - type: custom:mushroom-template-card
-            icon: mdi:clipboard-check
-            icon_color: "{% set j = states('sensor.voiture_controle_technique') | int(0) %}{{ 'grey' if j == 0 else ('red' if j < 0 else ('orange' if j < 60 else 'green')) }}"
-            primary: Contrôle technique
-            secondary: "{% set j = states('sensor.voiture_controle_technique') | int(0) %}{{ 'À renseigner' if j == 0 else ('Dépassé de ' ~ (-j) ~ ' j' if j < 0 else 'Dans ' ~ j ~ ' jours') }}"
-            tap_action:
-              action: navigate
-              navigation_path: entretien
-            grid_options:
-              columns: 12
-          - type: entities
-            title: "Entretien fait aujourd'hui"
-            show_header_toggle: false
-            entities:
-              - entity: input_select.voiture_entretien
-                name: Élément
-              - type: button
-                name: Enregistrer au kilométrage actuel
-                icon: mdi:check
-                action_name: Valider
-                tap_action:
-                  action: perform-action
-                  perform_action: script.voiture_entretien_fait
-                  confirmation:
-                    text: Enregistrer cet entretien au kilométrage actuel ?
-      - type: grid
-        cards:
-          - type: heading
-            heading: Carburant et coûts
-            icon: mdi:gas-station
-          - type: tile
-            entity: sensor.voiture_km_ce_mois
-            name: Km ce mois
-            grid_options:
-              columns: 6
-          - type: tile
-            entity: sensor.voiture_cout_carburant_ce_mois
-            name: Carburant ce mois
-            grid_options:
-              columns: 6
-          - type: tile
-            entity: sensor.voiture_km_cette_semaine
-            name: Km cette semaine
-            grid_options:
-              columns: 6
-          - type: tile
-            entity: input_number.voiture_conso_reelle
-            name: Conso réelle
-            grid_options:
-              columns: 6
-          - type: entities
-            title: Après un plein « à ras »
-            show_header_toggle: false
-            entities:
-              - entity: input_number.voiture_plein_litres
-                name: Litres mis
-              - entity: input_number.voiture_prix_gasoil
-                name: Prix du litre
-              - type: button
-                name: Enregistrer le plein
-                icon: mdi:gas-station
-                action_name: Valider
-                tap_action:
-                  action: perform-action
-                  perform_action: script.voiture_plein_fait
-          - type: heading
-            heading: Records
-            icon: mdi:trophy
-          - type: markdown
-            content: |
-              {% set r = states.sensor.voiture_records.attributes if states.sensor.voiture_records else {} %}
-              🏁 **0-100** : {{ r.get('zero_cent') ~ ' s' if r.get('zero_cent') else '—' }} · 🚀 **80-120** : {{ r.get('quatre_vingt_cent_vingt') ~ ' s' if r.get('quatre_vingt_cent_vingt') else '—' }}
+        **Batterie au démarrage** : {{ t.crank_v }} V {{ '✅' if t.crank_v >= 10 else '⚠️' }}{% endif %}{% if t.t0_100 %} · **0-100** : {{ t.t0_100 }} s{% endif %}{% if t.t80_120 %} · **80-120** : {{ t.t80_120 }} s{% endif %}
+        {% else %}Aucun trajet pour l'instant : il apparaîtra au prochain démarrage du moteur.{% endif %}
+    - type: heading
+      heading: 5 derniers trajets
+      icon: mdi:history
+    - type: markdown
+      content: |
+        {% set trajets = ((state_attr('sensor.voiture_historique_des_trajets', 'trajets') or []) | reverse | list)[:5] %}
+        {% if trajets %}
+        | Date | Km | Min | L/100 | € | Éco |
+        |:--|--:|--:|--:|--:|--:|
+        {% for t in trajets -%}
+        | {{ as_timestamp(t.debut) | timestamp_custom('%d/%m %H:%M') }} | {{ t.distance_km | round(1) }} | {{ t.duree_min | round(0) | int }} | {{ t.l100 if t.l100 else '—' }} | {{ t.cout }} | {{ t.eco_score }} |
+        {% endfor %}
+        {% else %}Aucun trajet enregistré pour l'instant.{% endif %}
+  - type: grid
+    cards:
+    - type: heading
+      heading: Entretien · appuyer pour modifier
+      icon: mdi:wrench
+    - type: custom:mushroom-template-card
+      icon: mdi:counter
+      icon_color: blue-grey
+      primary: '{{ states(''input_number.voiture_kilometrage'') | float(0) | round(0) | int }} km'
+      secondary: Kilométrage du compteur
+      tap_action:
+        action: more-info
+        entity: input_number.voiture_kilometrage
+      grid_options:
+        columns: 12
+    - type: custom:mushroom-template-card
+      icon: mdi:oil
+      icon_color: '{% set km = states(''sensor.voiture_vidange'') | float(0) %}{% set saisi = states(''input_number.voiture_vidange_km'') | float(0) > 0 %}{% set j = state_attr(''sensor.voiture_vidange'', ''jours_restants'') %}{{ ''grey'' if not saisi else (''red'' if km < 0 or (j is number and j < 0) else (''orange'' if km < 1000 or (j is number and j < 30) else ''green'')) }}'
+      primary: Vidange
+      secondary: '{% set km = states(''sensor.voiture_vidange'') | float(0) %}{% set j = state_attr(''sensor.voiture_vidange'', ''jours_restants'') %}{% if states(''input_number.voiture_vidange_km'') | float(0) == 0 %}À renseigner{% elif km < 0 %}Dépassée de {{ (-km) | int }} km{% else %}Dans {{ km | int }} km{{ '' ou '' ~ j ~ '' j'' if j is number }}{% endif %}'
+      tap_action:
+        action: more-info
+        entity: input_number.voiture_vidange_km
+      grid_options:
+        columns: 6
+    - type: custom:mushroom-template-card
+      icon: mdi:cog-sync
+      icon_color: '{% set km = states(''sensor.voiture_distribution'') | float(0) %}{% set saisi = states(''input_number.voiture_distribution_km'') | float(0) > 0 %}{{ ''grey'' if not saisi else (''red'' if km < 0 else (''orange'' if km < 10000 else ''green'')) }}'
+      primary: Distribution
+      secondary: '{% set km = states(''sensor.voiture_distribution'') | float(0) %}{% if states(''input_number.voiture_distribution_km'') | float(0) == 0 %}À renseigner{% elif km < 0 %}Dépassé de {{ (-km) | int }} km{% else %}Dans {{ km | int }} km{% endif %}'
+      tap_action:
+        action: more-info
+        entity: input_number.voiture_distribution_km
+      grid_options:
+        columns: 6
+    - type: custom:mushroom-template-card
+      icon: mdi:filter
+      icon_color: '{% set km = states(''sensor.voiture_filtre_a_gasoil'') | float(0) %}{% set saisi = states(''input_number.voiture_filtre_gasoil_km'') | float(0) > 0 %}{{ ''grey'' if not saisi else (''red'' if km < 0 else (''orange'' if km < 3000 else ''green'')) }}'
+      primary: Filtre à gasoil
+      secondary: '{% set km = states(''sensor.voiture_filtre_a_gasoil'') | float(0) %}{% if states(''input_number.voiture_filtre_gasoil_km'') | float(0) == 0 %}À renseigner{% elif km < 0 %}Dépassé de {{ (-km) | int }} km{% else %}Dans {{ km | int }} km{% endif %}'
+      tap_action:
+        action: more-info
+        entity: input_number.voiture_filtre_gasoil_km
+      grid_options:
+        columns: 6
+    - type: custom:mushroom-template-card
+      icon: mdi:air-filter
+      icon_color: '{% set km = states(''sensor.voiture_filtre_a_air'') | float(0) %}{% set saisi = states(''input_number.voiture_filtre_air_km'') | float(0) > 0 %}{{ ''grey'' if not saisi else (''red'' if km < 0 else (''orange'' if km < 3000 else ''green'')) }}'
+      primary: Filtre à air
+      secondary: '{% set km = states(''sensor.voiture_filtre_a_air'') | float(0) %}{% if states(''input_number.voiture_filtre_air_km'') | float(0) == 0 %}À renseigner{% elif km < 0 %}Dépassé de {{ (-km) | int }} km{% else %}Dans {{ km | int }} km{% endif %}'
+      tap_action:
+        action: more-info
+        entity: input_number.voiture_filtre_air_km
+      grid_options:
+        columns: 6
+    - type: custom:mushroom-template-card
+      icon: mdi:clipboard-check
+      icon_color: '{% set j = states(''sensor.voiture_controle_technique'') | int(0) %}{{ ''grey'' if j == 0 else (''red'' if j < 0 else (''orange'' if j < 60 else ''green'')) }}'
+      primary: Contrôle technique
+      secondary: '{% set j = states(''sensor.voiture_controle_technique'') | int(0) %}{{ ''À renseigner'' if j == 0 else (''Dépassé de '' ~ (-j) ~ '' j'' if j < 0 else ''Dans '' ~ j ~ '' jours'') }}'
+      tap_action:
+        action: more-info
+        entity: input_datetime.voiture_controle_technique
+      grid_options:
+        columns: 12
+    - type: custom:mushroom-chips-card
+      alignment: center
+      chips:
+      - type: template
+        entity: input_datetime.voiture_vidange_date
+        icon: mdi:oil
+        content: Vidange le {{ as_timestamp(states('input_datetime.voiture_vidange_date'), 0) | timestamp_custom('%d/%m/%Y') if has_value('input_datetime.voiture_vidange_date') else 'à saisir' }}
+        tap_action:
+          action: more-info
+      - type: template
+        entity: input_datetime.voiture_distribution_date
+        icon: mdi:cog-sync
+        content: Distribution le {{ as_timestamp(states('input_datetime.voiture_distribution_date'), 0) | timestamp_custom('%d/%m/%Y') if has_value('input_datetime.voiture_distribution_date') else 'à saisir' }}
+        tap_action:
+          action: more-info
+    - type: custom:mushroom-chips-card
+      alignment: center
+      chips:
+      - type: template
+        entity: input_boolean.voiture_annonces
+        icon: mdi:account-voice
+        content: Annonces vocales
+        icon_color: '{{ ''green'' if is_state(''input_boolean.voiture_annonces'', ''on'') else ''grey'' }}'
+        tap_action:
+          action: toggle
+      - type: template
+        entity: input_boolean.voiture_notif_fin_trajet
+        icon: mdi:message-text
+        content: Résumé de trajet
+        icon_color: '{{ ''green'' if is_state(''input_boolean.voiture_notif_fin_trajet'', ''on'') else ''grey'' }}'
+        tap_action:
+          action: toggle
+    - type: custom:mushroom-select-card
+      entity: input_select.voiture_entretien
+      name: Fait aujourd'hui
+      icon: mdi:wrench
+      layout: horizontal
+      grid_options:
+        columns: 8
+    - type: custom:mushroom-template-card
+      primary: Valider
+      icon: mdi:check
+      icon_color: green
+      tap_action:
+        action: perform-action
+        perform_action: script.voiture_entretien_fait
+        confirmation:
+          text: Enregistrer cet entretien au kilométrage actuel ?
+      grid_options:
+        columns: 4
+  - type: grid
+    cards:
+    - type: heading
+      heading: Carburant et coûts
+      icon: mdi:gas-station
+    - type: tile
+      entity: sensor.voiture_km_ce_mois
+      name: Km ce mois
+      grid_options:
+        columns: 6
+    - type: tile
+      entity: sensor.voiture_cout_carburant_ce_mois
+      name: Carburant ce mois
+      grid_options:
+        columns: 6
+    - type: tile
+      entity: sensor.voiture_km_cette_semaine
+      name: Km cette semaine
+      grid_options:
+        columns: 6
+    - type: tile
+      entity: input_number.voiture_conso_reelle
+      name: Conso réelle
+      grid_options:
+        columns: 6
+    - type: heading
+      heading: Après un plein « à ras »
+      icon: mdi:gas-station-outline
+    - type: custom:mushroom-template-card
+      icon: mdi:gas-station
+      icon_color: blue
+      primary: '{{ states(''input_number.voiture_plein_litres'') | float(0) }} L'
+      secondary: Litres mis
+      tap_action:
+        action: more-info
+        entity: input_number.voiture_plein_litres
+      grid_options:
+        columns: 4
+    - type: custom:mushroom-template-card
+      icon: mdi:currency-eur
+      icon_color: amber
+      primary: '{{ states(''input_number.voiture_prix_gasoil'') | float(0) }} €'
+      secondary: Prix du litre
+      tap_action:
+        action: more-info
+        entity: input_number.voiture_prix_gasoil
+      grid_options:
+        columns: 4
+    - type: custom:mushroom-template-card
+      icon: mdi:check
+      icon_color: green
+      primary: Plein fait
+      secondary: Enregistrer
+      tap_action:
+        action: perform-action
+        perform_action: script.voiture_plein_fait
+        confirmation:
+          text: Enregistrer ce plein « à ras » ?
+      grid_options:
+        columns: 4
+    - type: heading
+      heading: Records
+      icon: mdi:trophy
+    - type: markdown
+      content: |
+        {% set r = states.sensor.voiture_records.attributes if states.sensor.voiture_records else {} %}
+        🏁 **0-100** : {{ r.get('zero_cent') ~ ' s' if r.get('zero_cent') else '—' }} · 🚀 **80-120** : {{ r.get('quatre_vingt_cent_vingt') ~ ' s' if r.get('quatre_vingt_cent_vingt') else '—' }}
 
-              ⚡ **Vitesse max** : {{ r.get('vitesse_max') | int if r.get('vitesse_max') else '—' }} km/h · 🛣️ **Plus long** : {{ r.get('plus_long_trajet') | round(1) if r.get('plus_long_trajet') else '—' }} km
+        ⚡ **Vitesse max** : {{ r.get('vitesse_max') | int if r.get('vitesse_max') else '—' }} km/h · 🛣️ **Plus long** : {{ r.get('plus_long_trajet') | round(1) if r.get('plus_long_trajet') else '—' }} km
 
-              🍃 **Meilleur score éco** : {{ r.get('meilleur_score_eco') if r.get('meilleur_score_eco') else '—' }}/100
-  - title: Entretien
-    path: entretien
-    icon: mdi:wrench
-    type: sections
-    max_columns: 3
-    subview: true
-    back_path: carnet
-    sections:
-      - type: grid
-        cards:
-          - type: heading
-            heading: Kilométrage et vidange
-            icon: mdi:oil
-          - type: entities
-            show_header_toggle: false
-            entities:
-              - entity: input_number.voiture_kilometrage
-                name: Kilométrage actuel (compteur)
-              - entity: input_number.voiture_vidange_km
-                name: Dernière vidange (km)
-              - entity: input_datetime.voiture_vidange_date
-                name: Dernière vidange (date)
-      - type: grid
-        cards:
-          - type: heading
-            heading: Distribution et filtres
-            icon: mdi:cog-sync
-          - type: entities
-            show_header_toggle: false
-            entities:
-              - entity: input_number.voiture_distribution_km
-                name: Distribution (km)
-              - entity: input_datetime.voiture_distribution_date
-                name: Distribution (date)
-              - entity: input_number.voiture_filtre_gasoil_km
-                name: Filtre à gasoil (km)
-              - entity: input_number.voiture_filtre_air_km
-                name: Filtre à air (km)
-      - type: grid
-        cards:
-          - type: heading
-            heading: Contrôle technique et réglages
-            icon: mdi:cog
-          - type: entities
-            show_header_toggle: false
-            entities:
-              - entity: input_datetime.voiture_controle_technique
-                name: Prochain contrôle technique
-              - entity: input_boolean.voiture_annonces
-                name: "Annonces vocales sur l'autoradio"
-              - entity: input_boolean.voiture_notif_fin_trajet
-                name: Résumé de fin de trajet
-          - type: markdown
-            content: |
-              {% set c = states('input_text.voiture_correction_conso') %}Correction de la consommation : **{{ '×' ~ c if c | is_number else 'aucune pour l’instant' }}** (s'affine à chaque plein enregistré).
+        🍃 **Meilleur score éco** : {{ r.get('meilleur_score_eco') if r.get('meilleur_score_eco') else '—' }}/100
+
+        🔧 **Correction conso** : {% set c = states('input_text.voiture_correction_conso') %}{{ '×' ~ c if c | is_number else 'aucune (s’affine à chaque plein)' }}
