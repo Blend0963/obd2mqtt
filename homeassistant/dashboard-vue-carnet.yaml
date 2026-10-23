@@ -1,0 +1,196 @@
+title: Carnet
+path: carnet
+icon: mdi:notebook
+type: sections
+max_columns: 3
+sections:
+- type: grid
+  cards:
+  - type: heading
+    heading: Trajet
+    icon: mdi:map-marker-path
+  - type: custom:mushroom-template-card
+    icon: mdi:car-arrow-right
+    icon_color: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{{ ''green'' if t is mapping and t.active else ''grey'' }}'
+    primary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{{ (''Trajet en cours'' if t.active else ''Dernier trajet'') if t is mapping else ''Aucun trajet'' }}'
+    secondary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{% if t is mapping %}{{ t.distance_km | round(1) }} km · {{ t.duration_min | round(0) | int }} min · {{ t.avg_kmh | round(0)
+      | int }} km/h moy. · max {{ t.max_kmh | int }}{% endif %}'
+    grid_options:
+      columns: 12
+  - type: custom:mushroom-template-card
+    icon: mdi:gas-station
+    icon_color: blue
+    primary: '{{ states(''sensor.voiture_consommation_aux_100'') ~ '' L/100'' if has_value(''sensor.voiture_consommation_aux_100'') else ''Consommation'' }}'
+    secondary: '{{ states(''sensor.voiture_consommation_instantanee'') ~ '' L/h'' if has_value(''sensor.voiture_consommation_instantanee'') else ''à l’arrêt'' }}'
+    grid_options:
+      columns: 6
+  - type: custom:mushroom-template-card
+    icon: mdi:leaf
+    icon_color: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{% set s = t.eco_score if t is mapping else 0 %}{{ ''green'' if s >= 80 else (''amber'' if s >= 60 else ''red'') }}'
+    primary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}Éco {{ t.eco_score if t is mapping else ''—'' }}/100'
+    secondary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{% if t is mapping %}{{ t.harsh_accel }} accél. · {{ t.harsh_brake }} frein.{% endif %}'
+    grid_options:
+      columns: 6
+  - type: markdown
+    content: |
+      {% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}
+      {% if t is mapping %}
+      {% set c = states('input_text.voiture_correction_conso') | float(1) %}
+      {% set prix = states('input_number.voiture_prix_gasoil') | float(0) %}
+      **Carburant** : {{ (t.fuel_l * c) | round(2) }} L{% if t.l100 %} · {{ (t.l100 * c) | round(1) }} L/100{% endif %}{% if prix > 0 %} · {{ (t.fuel_l * c * prix) | round(2) }} €{% endif %}
+      {% if t.crank_v %}
+
+      **Batterie au démarrage** : {{ t.crank_v }} V {{ '✅' if t.crank_v >= 10 else '⚠️' }}{% endif %}{% if t.t0_100 %} · **0-100** : {{ t.t0_100 }} s{% endif %}{% if t.t80_120 %} · **80-120** : {{ t.t80_120 }} s{% endif %}
+      {% else %}Aucun trajet pour l'instant : il apparaîtra au prochain démarrage du moteur.{% endif %}
+  - type: heading
+    heading: 10 derniers trajets
+    icon: mdi:history
+  - type: markdown
+    content: |
+      {% set trajets = (state_attr('sensor.voiture_historique_des_trajets', 'trajets') or []) | reverse | list %}
+      {% if trajets %}
+      | Date | Km | Min | L/100 | € | Éco |
+      |:--|--:|--:|--:|--:|--:|
+      {% for t in trajets -%}
+      | {{ as_timestamp(t.debut) | timestamp_custom('%d/%m %H:%M') }} | {{ t.distance_km | round(1) }} | {{ t.duree_min | round(0) | int }} | {{ t.l100 if t.l100 else '—' }} | {{ t.cout }} | {{ t.eco_score }} |
+      {% endfor %}
+      {% else %}Aucun trajet enregistré pour l'instant.{% endif %}
+- type: grid
+  cards:
+  - type: heading
+    heading: Entretien
+    icon: mdi:wrench
+  - type: custom:mushroom-template-card
+    icon: mdi:counter
+    icon_color: blue-grey
+    primary: '{{ states(''input_number.voiture_kilometrage'') | float(0) | round(0) | int }} km'
+    secondary: Kilométrage · appuyer pour modifier l'historique
+    tap_action:
+      action: navigate
+      navigation_path: entretien
+    grid_options:
+      columns: 12
+  - type: custom:mushroom-template-card
+    icon: mdi:oil
+    icon_color: '{% set km = states(''sensor.voiture_vidange'') | float(0) %}{% set saisi = states(''input_number.voiture_vidange_km'') | float(0) > 0 %}{% set j = state_attr(''sensor.voiture_vidange'',
+      ''jours_restants'') %}{{ ''grey'' if not saisi else (''red'' if km < 0 or (j is number and j < 0) else (''orange'' if km < 1000 or (j is number and j < 30) else ''green'')) }}'
+    primary: Vidange
+    secondary: '{% set km = states(''sensor.voiture_vidange'') | float(0) %}{% set j = state_attr(''sensor.voiture_vidange'', ''jours_restants'') %}{% if states(''input_number.voiture_vidange_km'') | float(0)
+      == 0 %}À renseigner{% elif km < 0 %}Dépassée de {{ (-km) | int }} km{% else %}Dans {{ km | int }} km{{ '' ou '' ~ j ~ '' j'' if j is number }}{% endif %}'
+    tap_action:
+      action: navigate
+      navigation_path: entretien
+    grid_options:
+      columns: 6
+  - type: custom:mushroom-template-card
+    icon: mdi:cog-sync
+    icon_color: '{% set km = states(''sensor.voiture_distribution'') | float(0) %}{% set saisi = states(''input_number.voiture_distribution_km'') | float(0) > 0 %}{{ ''grey'' if not saisi else (''red''
+      if km < 0 else (''orange'' if km < 10000 else ''green'')) }}'
+    primary: Distribution
+    secondary: '{% set km = states(''sensor.voiture_distribution'') | float(0) %}{% if states(''input_number.voiture_distribution_km'') | float(0) == 0 %}À renseigner{% elif km < 0 %}Dépassé de {{ (-km)
+      | int }} km{% else %}Dans {{ km | int }} km{% endif %}'
+    tap_action:
+      action: navigate
+      navigation_path: entretien
+    grid_options:
+      columns: 6
+  - type: custom:mushroom-template-card
+    icon: mdi:filter
+    icon_color: '{% set km = states(''sensor.voiture_filtre_a_gasoil'') | float(0) %}{% set saisi = states(''input_number.voiture_filtre_gasoil_km'') | float(0) > 0 %}{{ ''grey'' if not saisi else (''red''
+      if km < 0 else (''orange'' if km < 3000 else ''green'')) }}'
+    primary: Filtre à gasoil
+    secondary: '{% set km = states(''sensor.voiture_filtre_a_gasoil'') | float(0) %}{% if states(''input_number.voiture_filtre_gasoil_km'') | float(0) == 0 %}À renseigner{% elif km < 0 %}Dépassé de {{ (-km)
+      | int }} km{% else %}Dans {{ km | int }} km{% endif %}'
+    tap_action:
+      action: navigate
+      navigation_path: entretien
+    grid_options:
+      columns: 6
+  - type: custom:mushroom-template-card
+    icon: mdi:air-filter
+    icon_color: '{% set km = states(''sensor.voiture_filtre_a_air'') | float(0) %}{% set saisi = states(''input_number.voiture_filtre_air_km'') | float(0) > 0 %}{{ ''grey'' if not saisi else (''red'' if
+      km < 0 else (''orange'' if km < 3000 else ''green'')) }}'
+    primary: Filtre à air
+    secondary: '{% set km = states(''sensor.voiture_filtre_a_air'') | float(0) %}{% if states(''input_number.voiture_filtre_air_km'') | float(0) == 0 %}À renseigner{% elif km < 0 %}Dépassé de {{ (-km) |
+      int }} km{% else %}Dans {{ km | int }} km{% endif %}'
+    tap_action:
+      action: navigate
+      navigation_path: entretien
+    grid_options:
+      columns: 6
+  - type: custom:mushroom-template-card
+    icon: mdi:clipboard-check
+    icon_color: '{% set j = states(''sensor.voiture_controle_technique'') | int(0) %}{{ ''grey'' if j == 0 else (''red'' if j < 0 else (''orange'' if j < 60 else ''green'')) }}'
+    primary: Contrôle technique
+    secondary: '{% set j = states(''sensor.voiture_controle_technique'') | int(0) %}{{ ''À renseigner'' if j == 0 else (''Dépassé de '' ~ (-j) ~ '' j'' if j < 0 else ''Dans '' ~ j ~ '' jours'') }}'
+    tap_action:
+      action: navigate
+      navigation_path: entretien
+    grid_options:
+      columns: 12
+  - type: entities
+    title: Entretien fait aujourd'hui
+    show_header_toggle: false
+    entities:
+    - entity: input_select.voiture_entretien
+      name: Élément
+    - type: button
+      name: Enregistrer au kilométrage actuel
+      icon: mdi:check
+      action_name: Valider
+      tap_action:
+        action: perform-action
+        perform_action: script.voiture_entretien_fait
+        confirmation:
+          text: Enregistrer cet entretien au kilométrage actuel ?
+- type: grid
+  cards:
+  - type: heading
+    heading: Carburant et coûts
+    icon: mdi:gas-station
+  - type: tile
+    entity: sensor.voiture_km_ce_mois
+    name: Km ce mois
+    grid_options:
+      columns: 6
+  - type: tile
+    entity: sensor.voiture_cout_carburant_ce_mois
+    name: Carburant ce mois
+    grid_options:
+      columns: 6
+  - type: tile
+    entity: sensor.voiture_km_cette_semaine
+    name: Km cette semaine
+    grid_options:
+      columns: 6
+  - type: tile
+    entity: input_number.voiture_conso_reelle
+    name: Conso réelle
+    grid_options:
+      columns: 6
+  - type: entities
+    title: Après un plein « à ras »
+    show_header_toggle: false
+    entities:
+    - entity: input_number.voiture_plein_litres
+      name: Litres mis
+    - entity: input_number.voiture_prix_gasoil
+      name: Prix du litre
+    - type: button
+      name: Enregistrer le plein
+      icon: mdi:gas-station
+      action_name: Valider
+      tap_action:
+        action: perform-action
+        perform_action: script.voiture_plein_fait
+  - type: heading
+    heading: Records
+    icon: mdi:trophy
+  - type: markdown
+    content: |
+      {% set r = states.sensor.voiture_records.attributes if states.sensor.voiture_records else {} %}
+      🏁 **0-100** : {{ r.get('zero_cent') ~ ' s' if r.get('zero_cent') else '—' }} · 🚀 **80-120** : {{ r.get('quatre_vingt_cent_vingt') ~ ' s' if r.get('quatre_vingt_cent_vingt') else '—' }}
+
+      ⚡ **Vitesse max** : {{ r.get('vitesse_max') | int if r.get('vitesse_max') else '—' }} km/h · 🛣️ **Plus long** : {{ r.get('plus_long_trajet') | round(1) if r.get('plus_long_trajet') else '—' }} km
+
+      🍃 **Meilleur score éco** : {{ r.get('meilleur_score_eco') if r.get('meilleur_score_eco') else '—' }}/100

@@ -1,0 +1,55 @@
+title: Entretien
+path: entretien
+icon: mdi:wrench
+type: sections
+max_columns: 3
+subview: true
+back_path: carnet
+sections:
+- type: grid
+  cards:
+  - type: heading
+    heading: Kilométrage et vidange
+    icon: mdi:oil
+  - type: entities
+    show_header_toggle: false
+    entities:
+    - entity: input_number.voiture_kilometrage
+      name: Kilométrage actuel (compteur)
+    - entity: input_number.voiture_vidange_km
+      name: Dernière vidange (km)
+    - entity: input_datetime.voiture_vidange_date
+      name: Dernière vidange (date)
+- type: grid
+  cards:
+  - type: heading
+    heading: Distribution et filtres
+    icon: mdi:cog-sync
+  - type: entities
+    show_header_toggle: false
+    entities:
+    - entity: input_number.voiture_distribution_km
+      name: Distribution (km)
+    - entity: input_datetime.voiture_distribution_date
+      name: Distribution (date)
+    - entity: input_number.voiture_filtre_gasoil_km
+      name: Filtre à gasoil (km)
+    - entity: input_number.voiture_filtre_air_km
+      name: Filtre à air (km)
+- type: grid
+  cards:
+  - type: heading
+    heading: Contrôle technique et réglages
+    icon: mdi:cog
+  - type: entities
+    show_header_toggle: false
+    entities:
+    - entity: input_datetime.voiture_controle_technique
+      name: Prochain contrôle technique
+    - entity: input_boolean.voiture_annonces
+      name: Annonces vocales sur l'autoradio
+    - entity: input_boolean.voiture_notif_fin_trajet
+      name: Résumé de fin de trajet
+  - type: markdown
+    content: |
+      {% set c = states('input_text.voiture_correction_conso') %}Correction de la consommation : **{{ '×' ~ c if c | is_number else 'aucune pour l’instant' }}** (s'affine à chaque plein enregistré).
