@@ -160,10 +160,12 @@ template:
       - name: Voiture entretien à prévoir
         unique_id: voiture_entretien_a_prevoir
         icon: mdi:wrench-clock
+        # Seulement ce qui est renseigné : une vidange à 0 km n'a jamais été saisie
         state: >-
           {% set v = states('sensor.voiture_vidange') | float(99999) %}
+          {% set vidange_saisie = states('input_number.voiture_vidange_km') | float(0) > 0 %}
           {% set ct = states('sensor.voiture_controle_technique') %}
-          {{ v < 1000 or (ct | is_number and ct | int < 30) }}
+          {{ (vidange_saisie and v < 1000) or (ct | is_number and ct | int < 30) }}
 
   - sensor:
       # Turbo et rampe en bar (remplacent l'ancien voiture_calculs.yaml : mêmes identifiants,
