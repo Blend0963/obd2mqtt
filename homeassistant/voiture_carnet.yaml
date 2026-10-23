@@ -165,7 +165,8 @@ template:
           {% set v = states('sensor.voiture_vidange') | float(99999) %}
           {% set vidange_saisie = states('input_number.voiture_vidange_km') | float(0) > 0 %}
           {% set ct = states('sensor.voiture_controle_technique') %}
-          {{ (vidange_saisie and v < 1000) or (ct | is_number and ct | int < 30) }}
+          {# 0 jour = date jamais saisie (Home Assistant met la date du jour par défaut) #}
+          {{ (vidange_saisie and v < 1000) or (ct | is_number and ct | int != 0 and -365 < ct | int < 30) }}
 
   - sensor:
       # Turbo et rampe en bar (remplacent l'ancien voiture_calculs.yaml : mêmes identifiants,
