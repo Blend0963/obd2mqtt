@@ -9,7 +9,7 @@
 #
 # À adapter :
 #   - notify.mobile_app_mycar   → l'autoradio (annonces vocales)
-#   - notify.rappels            → votre téléphone (groupe de notifications)
+#   - notify.rappels            → vos notifications (bot Telegram ou groupe de notifications)
 #   - les intervalles d'entretien (section « Entretien », variables en tête de chaque capteur)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -411,6 +411,34 @@ script:
           data:
             tts_text: "{{ message }}"
 
+  # Toutes les notifications passent par ici. Le bot Telegram crée une entité
+  # notify.rappels (action notify.send_message) ; un groupe de notifications ou
+  # l'appli mobile crée une action notify.rappels : les deux marchent.
+  voiture_notifier:
+    alias: Voiture — notification
+    mode: queued
+    fields:
+      titre:
+        description: Titre
+      message:
+        description: Message
+    sequence:
+      - if:
+          - condition: template
+            value_template: "{{ states.notify.rappels is not none }}"
+        then:
+          - action: notify.send_message
+            target:
+              entity_id: notify.rappels
+            data:
+              title: "{{ titre | default('') }}"
+              message: "{{ message }}"
+        else:
+          - action: notify.rappels
+            data:
+              title: "{{ titre | default('') }}"
+              message: "{{ message }}"
+
   voiture_alerte:
     alias: Voiture — alerte (téléphone + autoradio)
     mode: queued
@@ -422,9 +450,9 @@ script:
       vocal:
         description: Texte dit sur l'autoradio (facultatif)
     sequence:
-      - action: notify.rappels
+      - action: script.voiture_notifier
         data:
-          title: "{{ titre }}"
+          titre: "{{ titre }}"
           message: "{{ message }}"
       - if:
           - condition: template
@@ -624,9 +652,9 @@ automation:
             entity_id: input_boolean.voiture_notif_fin_trajet
             state: "on"
         then:
-          - action: notify.rappels
+          - action: script.voiture_notifier
             data:
-              title: "🚗 Trajet terminé"
+              titre: "🚗 Trajet terminé"
               message: >-
                 {{ trajet.distance_km | round(1) }} km · {{ trajet.duree_min | round(0) | int }} min ·
                 {{ trajet.vitesse_moy | round(0) | int }} km/h de moyenne
@@ -795,18 +823,18 @@ automation:
             {% set r = namespace(l=[]) %}
             {% set v = states('sensor.voiture_vidange') | float(99999) %}
             {% set vj = state_attr('sensor.voiture_vidange', 'jours_restants') %}
-            {% if v < 500 or (vj is number and vj < 30) %}{% set r.l = r.l + ['Vidange : ' ~ (v | int) ~ ' km' ~ (' / ' ~ vj ~ ' j' if vj is number else '')] %}{% endif %}
-            {% for e, n in [('sensor.voiture_filtre_a_gasoil', 'Filtre à gasoil'), ('sensor.voiture_filtre_a_air', 'Filtre à air'), ('sensor.voiture_distribution', 'Distribution')] %}
-              {% if states(e) | float(99999) < 1000 %}{% set r.l = r.l + [n ~ ' : ' ~ (states(e) | int) ~ ' km'] %}{% endif %}
+            {% if states('input_number.voiture_vidange_km') | float(0) > 0 and (v < 500 or (vj is number and vj < 30)) %}{% set r.l = r.l + ['Vidange : ' ~ (v | int) ~ ' km' ~ (' / ' ~ vj ~ ' j' if vj is number else '')] %}{% endif %}
+            {% for e, n, saisi in [('sensor.voiture_filtre_a_gasoil', 'Filtre à gasoil', 'input_number.voiture_filtre_gasoil_km'), ('sensor.voiture_filtre_a_air', 'Filtre à air', 'input_number.voiture_filtre_air_km'), ('sensor.voiture_distribution', 'Distribution', 'input_number.voiture_distribution_km')] %}
+              {% if states(saisi) | float(0) > 0 and states(e) | float(99999) < 1000 %}{% set r.l = r.l + [n ~ ' : ' ~ (states(e) | int) ~ ' km'] %}{% endif %}
             {% endfor %}
             {% set ct = states('sensor.voiture_controle_technique') %}
-            {% if ct | is_number and ct | int < 30 %}{% set r.l = r.l + ['Contrôle technique dans ' ~ ct ~ ' jours'] %}{% endif %}
+            {% if ct | is_number and ct | int != 0 and -365 < ct | int < 30 %}{% set r.l = r.l + ['Contrôle technique dans ' ~ ct ~ ' jours'] %}{% endif %}
             {{ r.l }}
       - condition: template
         value_template: "{{ rappels | length > 0 }}"
-      - action: notify.rappels
+      - action: script.voiture_notifier
         data:
-          title: "🔧 Entretien de la voiture"
+          titre: "🔧 Entretien de la voiture"
           message: "{{ rappels | join('\n') }}"
 
   # ── Domotique (exemples à adapter, désactivés) ──
