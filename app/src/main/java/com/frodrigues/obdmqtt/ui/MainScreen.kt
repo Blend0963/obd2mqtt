@@ -241,8 +241,8 @@ fun MainScreen(
                 // ── Trip ──────────────────────────────────────────────────────
                 trip?.let { t ->
                     Text(
-                        text = (if (t.active) "Trajet en cours : " else "Dernier trajet : ") +
-                               String.format(Locale.FRANCE, "%.1f km · %d min", t.distanceKm, (t.durationSeconds / 60).toInt()) +
+                        text = (if (t.active && t.paused) "Trajet en pause : " else if (t.active) "Trajet en cours : " else "Dernier trajet : ") +
+                               String.format(Locale.FRANCE, "%.1f km · %d min", t.distanceKm, (t.engineSeconds / 60).toInt()) +
                                (t.litresPer100Km?.let { String.format(Locale.FRANCE, " · %.1f L/100 km (estimé)", it) } ?: "") +
                                " · éco ${t.ecoScore}/100",
                         style = MaterialTheme.typography.bodyMedium,

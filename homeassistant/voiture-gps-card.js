@@ -11,9 +11,11 @@
  * ⋮ → Ressources → Ajouter : URL /local/voiture-gps-card.js, type « Module JavaScript ».
  *
  * type: custom:voiture-gps-card
- * entity: device_tracker.mycar                    # requis : position (appli compagnon)
+ * entity: device_tracker.mycar                    # requis : position (appli compagnon), ou un capteur
+ *                                                 # avec un attribut location: [lat, lon] (adresse géocodée)
  * speed_entity: sensor.peugeot_407_vitesse        # facultatif : vitesse OBD en km/h
  * speed_limit_entity: sensor.vitesse_limite       # facultatif : panneau de limitation
+ * show_speed: true                               # false : pas de compteur sur la carte
  * zoom: 16                                        # facultatif
  * pitch: 45                                       # inclinaison 3D (0 = vue du dessus)
  * heading_up: true                                # carte orientée dans le sens de la marche
@@ -259,9 +261,23 @@ class VoitureGpsCard extends HTMLElement {
       this._showMessage(`Entité introuvable : ${this._config.entity}`);
       return;
     }
-    const { latitude, longitude, course, speed } = state.attributes;
-    if (typeof latitude !== "number" || typeof longitude !== "number") {
-      this._showMessage("Pas encore de position GPS");
+    const attrs = state.attributes;
+    // Heading and speed (m/s) under the names used by the companion app, GPSLogger, OwnTracks…
+    const num = (v) => (v === undefined || v === null || v === "" ? undefined : Number(v));
+    const course = num(attrs.course ?? attrs.direction ?? attrs.bearing ?? attrs.heading);
+    const speed = num(attrs.speed ?? attrs.velocity);
+    let { latitude, longitude } = attrs;
+    // Geocoded-location sensors carry the position as "location: [lat, lon]"
+    if (typeof latitude !== "number" && Array.isArray(state.attributes.location)) {
+      [latitude, longitude] = state.attributes.location.map(Number);
+    }
+    // Some integrations send the coordinates as text
+    latitude = typeof latitude === "string" ? parseFloat(latitude) : latitude;
+    longitude = typeof longitude === "string" ? parseFloat(longitude) : longitude;
+    if (typeof latitude !== "number" || typeof longitude !== "number" || isNaN(latitude) || isNaN(longitude)) {
+      // Say exactly what was received, so a wrong entity or a missing attribute is obvious
+      const keys = Object.keys(state.attributes).join(", ") || "aucun";
+      this._showMessage(`Pas de position dans ${this._config.entity} (état : ${state.state}). Attributs reçus : ${keys}`);
       return;
     }
     const point = [longitude, latitude];
@@ -285,7 +301,7 @@ class VoitureGpsCard extends HTMLElement {
     } else if (previous && distance(previous, point) > 8) {
       this._heading = bearing(previous, point);
     }
-    this._fix = { point, time: performance.now(), gpsSpeed: typeof gpsSpeed === "number" ? gpsSpeed : 0, updated };
+    this._fix = { point, time: performance.now(), gpsSpeed: Number.isFinite(gpsSpeed) ? gpsSpeed : 0, updated };
     if (!previous || distance(previous, point) > 3) {
       this._trail.push(point);
       if (this._trail.length > TRAIL_POINTS) this._trail.shift();
@@ -308,7 +324,7 @@ class VoitureGpsCard extends HTMLElement {
     const over = !isNaN(limit) && kmh > limit + 3;
 
     const speedBox = this._el("speed");
-    speedBox.hidden = false;
+    speedBox.hidden = this._config.show_speed === false;
     speedBox.firstElementChild.textContent = kmh;
     speedBox.classList.toggle("over", over);
 

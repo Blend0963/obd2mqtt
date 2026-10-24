@@ -30,11 +30,17 @@ data class Trip(
     /** Instantaneous consumption, only while the trip is active. */
     val fuelRateLh: Double?,
     val fuelL100: Double?,
+    /** Engine stopped for less than [TripTracker.PAUSE_MS] so far: the trip may still go on. */
+    val paused: Boolean = false,
 ) {
+    /** Start to end, stops included. */
     val durationSeconds: Double get() = (endMs - startMs) / 1000.0
-    val averageSpeedKmh: Double get() = if (durationSeconds > 0) distanceKm / (durationSeconds / 3600) else 0.0
+    /** Time with the engine running: what a trip "lasted" once stops are left out. */
+    val engineSeconds: Double get() = drivingSeconds + idleSeconds
+    /** Over the time spent moving: idling at a light or in a jam doesn't pull it down. */
+    val averageSpeedKmh: Double get() = if (drivingSeconds > 0) distanceKm / (drivingSeconds / 3600) else 0.0
     val litresPer100Km: Double? get() = if (distanceKm >= 1) fuelLitres / distanceKm * 100 else null
-    val idlePercent: Double get() = if (durationSeconds > 0) idleSeconds / durationSeconds * 100 else 0.0
+    val idlePercent: Double get() = if (engineSeconds > 0) idleSeconds / engineSeconds * 100 else 0.0
 
     /**
      * Eco-driving score out of 100: events are weighted per 10 km so one hard brake on a short
@@ -51,9 +57,12 @@ data class Trip(
 
 /**
  * Builds trips from the OBD readings: a trip starts when the engine runs (RPM above
- * [RUNNING_RPM]) and ends after [END_AFTER_STOPPED_MS] with the engine stopped, or after a
- * gap of [END_AFTER_SILENCE_MS] without readings (car units often power off with the
- * ignition, before the engine-off can be seen; HA also closes a trip that stops updating).
+ * [RUNNING_RPM]) and ends after [PAUSE_MS] with the engine stopped, or without readings
+ * (car units often power off with the ignition, before the engine-off can be seen; HA also
+ * closes a trip that stops updating). A shorter stop (stalled engine, quick stop) is a pause:
+ * the trip goes on when the engine restarts. Longer stops end the trip; HA offers to resume
+ * it ("Reprendre le trajet") when the car leaves again within 8 h and merges the two. The
+ * running trip is saved ([TripStore]) so a pause survives the app being killed with the ignition.
  *
  * Pure logic, fed with readings and their timestamps, so it is unit-testable.
  */
@@ -70,11 +79,24 @@ class TripTracker {
     private val voltageHistory = ArrayDeque<Pair<Long, Double>>()
 
     /** The trip to report: the running one, else the last finished one. */
-    fun snapshot(now: Long): Trip? = current?.toTrip(now, active = true) ?: lastFinished
+    fun snapshot(now: Long): Trip? =
+        current?.toTrip(now, active = true, paused = engineStoppedSinceMs != null) ?: lastFinished
+
+    /**
+     * Picks up a trip saved before the app was killed (ignition off on car units that
+     * force-stop apps), if it is still within the pause. Returns true when resumed.
+     */
+    fun resume(saved: Trip, now: Long): Boolean {
+        if (current != null || !saved.active || now - saved.endMs !in 0..PAUSE_MS) return false
+        current = Builder.from(saved)
+        lastReadingMs = saved.endMs
+        engineStoppedSinceMs = saved.endMs
+        return true
+    }
 
     fun onReading(pid: Int, value: Double, timestampMs: Long, readings: Map<Int, Double>) {
         // No reading for a long time: that trip ended when the data stopped
-        if (current != null && timestampMs - lastReadingMs > END_AFTER_SILENCE_MS) finish(lastReadingMs)
+        if (current != null && timestampMs - lastReadingMs > PAUSE_MS) finish(lastReadingMs)
         lastReadingMs = timestampMs
 
         if (pid == PidRegistry.ADAPTER_VOLTAGE) {
@@ -88,7 +110,7 @@ class TripTracker {
                 if (current == null) start(timestampMs)
             } else {
                 val since = engineStoppedSinceMs ?: timestampMs.also { engineStoppedSinceMs = it }
-                if (current != null && timestampMs - since >= END_AFTER_STOPPED_MS) finish(since)
+                if (current != null && timestampMs - since >= PAUSE_MS) finish(since)
             }
         }
         current?.onReading(pid, value, timestampMs, readings)
@@ -236,7 +258,25 @@ class TripTracker {
             lastMafMs = t
         }
 
-        fun toTrip(now: Long, active: Boolean): Trip {
+        companion object {
+            fun from(t: Trip) = Builder(t.startMs, t.crankVoltage).apply {
+                distanceKm = t.distanceKm
+                drivingSeconds = t.drivingSeconds
+                idleSeconds = t.idleSeconds
+                maxSpeed = t.maxSpeedKmh
+                maxRpm = t.maxRpm
+                maxCoolant = t.maxCoolantC
+                fuelLitres = t.fuelLitres
+                harshAccelerations = t.harshAccelerations
+                harshBrakings = t.harshBrakings
+                overRevs = t.overRevs
+                coldOverRevs = t.coldOverRevs
+                zeroTo100 = t.zeroTo100Seconds
+                eightyTo120 = t.eightyTo120Seconds
+            }
+        }
+
+        fun toTrip(now: Long, active: Boolean, paused: Boolean = false): Trip {
             val speed = lastSpeed?.second ?: 0.0
             val rate = if (active) fuelRateLh else null
             return Trip(
@@ -248,6 +288,7 @@ class TripTracker {
                 zeroTo100Seconds = zeroTo100, eightyTo120Seconds = eightyTo120,
                 fuelRateLh = rate,
                 fuelL100 = if (rate != null && speed >= 5) rate / speed * 100 else null,
+                paused = paused,
             )
         }
     }
@@ -260,8 +301,8 @@ class TripTracker {
         private const val MAF = 0x10
 
         const val RUNNING_RPM = 300.0
-        const val END_AFTER_STOPPED_MS = 60_000L
-        const val END_AFTER_SILENCE_MS = 3 * 60_000L
+        /** Longest stop (engine off or no data) that doesn't end the trip; same value in HA. */
+        const val PAUSE_MS = 3 * 60_000L
         private const val CRANK_WINDOW_MS = 20_000L
         /** Above this the battery never dipped: the start wasn't seen (app connected afterwards). */
         private const val CRANK_DIP_MAX_V = 11.8

@@ -9,7 +9,8 @@
 #
 # À adapter :
 #   - notify.mobile_app_mycar   → l'autoradio (annonces vocales)
-#   - notify.notify             → votre téléphone (ex. notify.mobile_app_pixel_8)
+#   - notify.rappels            → vos notifications (bot Telegram ou groupe de notifications)
+#   - conversation.igor         → l'assistant IA qui rédige les notifications (script voiture_notifier)
 #   - les intervalles d'entretien (section « Entretien », variables en tête de chaque capteur)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -71,6 +72,15 @@ input_number:
     step: 0.01
     mode: box
   # Calculés automatiquement, à ne pas modifier à la main
+  # Somme des trajets seulement : recaler le kilométrage ne la change pas
+  voiture_distance_cumulee:
+    name: Voiture — distance parcourue (total des trajets)
+    icon: mdi:map-marker-distance
+    unit_of_measurement: km
+    min: 0
+    max: 9999999
+    step: 0.01
+    mode: box
   voiture_carburant_total:
     name: Voiture — carburant consommé (total)
     icon: mdi:gas-station
@@ -122,11 +132,30 @@ input_text:
   voiture_dernier_trajet_id:
     name: Voiture — dernier trajet enregistré
     max: 32
+  # « <trajet en cours>|<trajet repris> », renseigné par le bouton « Reprendre le trajet »
+  voiture_trajet_repris_id:
+    name: Voiture — trajet repris
+    max: 64
   # Facteur appris des pleins (vide = 1, pas de correction). Calculé automatiquement.
   voiture_correction_conso:
     name: Voiture — correction de la consommation
     icon: mdi:tune-variant
     max: 10
+  # Identifiant du webhook de l'appli OBD (ligne « webhook_id » de peugeot_407.yaml,
+  # ou Réglages → Webhook dans l'appli). Sert à rendre les capteurs « indisponibles »
+  # quand la voiture passe hors ligne. À saisir une fois dans Paramètres → Entrées.
+  voiture_webhook_id:
+    name: Voiture — identifiant du webhook
+    icon: mdi:webhook
+    max: 255
+    mode: password
+
+# « Reprendre le trajet » : proposé une minute quand la voiture repart moins de 8 h après
+# la fin du trajet précédent ; un appui fusionne les deux trajets dans l'historique.
+input_button:
+  voiture_reprendre_le_trajet:
+    name: Voiture — reprendre le trajet
+    icon: mdi:play-circle
 
 input_boolean:
   voiture_annonces:
@@ -148,7 +177,83 @@ input_select:
 
 # ─── Capteurs ────────────────────────────────────────────────────────────────
 template:
+  # Pour afficher ou cacher les pastilles de l'Aperçu
+  - binary_sensor:
+      # L'appli envoie les mesures plusieurs fois par seconde tant que l'autoradio a du réseau.
+      # Sans réseau (garage, parking souterrain) rien n'arrive, même pas le « moteur coupé » :
+      # 2 min sans données = voiture hors ligne, donc arrêtée. last_reported avance à chaque
+      # envoi, même quand la valeur ne change pas.
+      - name: Voiture en ligne
+        unique_id: voiture_en_ligne
+        device_class: connectivity
+        state: >-
+          {% set ns = namespace(recent=false) %}
+          {% for e in ['sensor.peugeot_407_tension_batterie', 'sensor.peugeot_407_vitesse', 'sensor.peugeot_407_regime_moteur'] %}
+            {% set s = states[e] %}
+            {% if s is not none and s.state not in ['unavailable', 'unknown']
+                  and (now() - s.last_reported).total_seconds() < 120 %}
+              {% set ns.recent = true %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.recent }}
+      - name: Voiture trajet en cours
+        unique_id: voiture_trajet_en_cours
+        icon: mdi:map-marker-path
+        state: >-
+          {% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}
+          {{ t is mapping and t.active and not t.paused | default(false)
+             and is_state('binary_sensor.voiture_en_ligne', 'on') }}
+      - name: Voiture entretien à prévoir
+        unique_id: voiture_entretien_a_prevoir
+        icon: mdi:wrench-clock
+        # Seulement ce qui est renseigné : une vidange à 0 km n'a jamais été saisie
+        state: >-
+          {% set v = states('sensor.voiture_vidange') | float(99999) %}
+          {% set vidange_saisie = states('input_number.voiture_vidange_km') | float(0) > 0 %}
+          {% set ct = states('sensor.voiture_controle_technique') %}
+          {# 0 jour = date jamais saisie (Home Assistant met la date du jour par défaut) #}
+          {{ (vidange_saisie and v < 1000) or (ct | is_number and ct | int != 0 and -365 < ct | int < 30) }}
+
   - sensor:
+      # Turbo et rampe en bar (remplacent l'ancien voiture_calculs.yaml : mêmes identifiants,
+      # donc mêmes entités sensor.pression_turbo et sensor.pression_rampe)
+      - name: Pression turbo
+        unique_id: voiture_pression_turbo
+        unit_of_measurement: bar
+        device_class: pressure
+        state_class: measurement
+        icon: mdi:turbine
+        availability: "{{ has_value('sensor.peugeot_407_pression_collecteur_admission') }}"
+        state: >-
+          {{ ((states('sensor.peugeot_407_pression_collecteur_admission') | float(0) - 101.3) / 100) | round(2) }}
+      - name: Pression rampe
+        unique_id: voiture_pression_rampe
+        unit_of_measurement: bar
+        device_class: pressure
+        state_class: measurement
+        icon: mdi:needle
+        availability: "{{ has_value('sensor.peugeot_407_pression_rampe_injection') }}"
+        state: >-
+          {{ (states('sensor.peugeot_407_pression_rampe_injection') | float(0) / 100) | round(0) }}
+
+      # Pour les moyennes : seulement quand la voiture roule / quand le moteur tourne.
+      # À l'arrêt ou moteur coupé, ils sont « indisponibles » et ne comptent pas.
+      - name: Voiture vitesse en roulant
+        unique_id: voiture_vitesse_en_roulant
+        unit_of_measurement: km/h
+        device_class: speed
+        state_class: measurement
+        icon: mdi:speedometer
+        availability: "{{ states('sensor.peugeot_407_vitesse') | float(0) >= 3 }}"
+        state: "{{ states('sensor.peugeot_407_vitesse') | float(0) }}"
+      - name: Voiture régime moteur tournant
+        unique_id: voiture_regime_moteur_tournant
+        unit_of_measurement: tr/min
+        state_class: measurement
+        icon: mdi:engine
+        availability: "{{ states('sensor.peugeot_407_regime_moteur') | float(0) >= 300 }}"
+        state: "{{ states('sensor.peugeot_407_regime_moteur') | float(0) }}"
+
       - name: Voiture kilométrage
         unique_id: voiture_kilometrage
         unit_of_measurement: km
@@ -156,6 +261,14 @@ template:
         state_class: total_increasing
         icon: mdi:counter
         state: "{{ states('input_number.voiture_kilometrage') | float(0) | round(0) }}"
+
+      - name: Voiture distance parcourue
+        unique_id: voiture_distance_parcourue
+        unit_of_measurement: km
+        device_class: distance
+        state_class: total_increasing
+        icon: mdi:map-marker-distance
+        state: "{{ states('input_number.voiture_distance_cumulee') | float(0) | round(2) }}"
 
       - name: Voiture carburant consommé
         unique_id: voiture_carburant_consomme
@@ -248,10 +361,51 @@ template:
         unit_of_measurement: €
         icon: mdi:currency-eur
         state: >-
-          {{ (states('sensor.voiture_carburant_mois') | float(0)
+          {{ (states('sensor.voiture_carburant_ce_mois') | float(0)
               * states('input_number.voiture_prix_gasoil') | float(0)) | round(2) }}
 
-  # Historique des 10 derniers trajets et records, mis à jour à chaque fin de trajet
+  # « Reprendre le trajet » : allumé une minute quand un nouveau trajet arrive moins de 8 h
+  # après la fin du précédent (heure de départ réelle, même si le réseau revient plus tard)
+  - triggers:
+      - trigger: state
+        entity_id: sensor.peugeot_407_trajet
+        attribute: trajet
+        id: nouveau
+      - trigger: state
+        entity_id: input_button.voiture_reprendre_le_trajet
+        id: choisi
+    conditions:
+      - condition: template
+        value_template: >-
+          {% if trigger.id == 'nouveau' %}
+            {% set new = trigger.to_state.attributes.get('trajet') if trigger.to_state else none %}
+            {% set old = trigger.from_state.attributes.get('trajet') if trigger.from_state else none %}
+            {{ new is mapping and old is mapping and new.id != old.id and new.active }}
+          {% else %}true{% endif %}
+    binary_sensor:
+      - name: Voiture reprise proposée
+        unique_id: voiture_reprise_proposee
+        icon: mdi:play-circle
+        auto_off: "00:01:00"
+        state: >-
+          {% if trigger.id == 'nouveau' %}
+            {% set new = trigger.to_state.attributes.trajet %}
+            {% set old = trigger.from_state.attributes.trajet %}
+            {{ (new.start - old.end) / 1000 < 8 * 3600
+               and ((old.distance_km or 0) >= 0.3 or (old.duration_min or 0) >= 2) }}
+          {% else %}false{% endif %}
+        attributes:
+          precedent_id: >-
+            {{ trigger.from_state.attributes.trajet.id if trigger.id == 'nouveau' else this.attributes.get('precedent_id') }}
+          precedent_debut: >-
+            {{ (trigger.from_state.attributes.trajet.start / 1000) | timestamp_custom('%H:%M')
+               if trigger.id == 'nouveau' else this.attributes.get('precedent_debut') }}
+          precedent_km: >-
+            {{ trigger.from_state.attributes.trajet.distance_km | round(0) | int
+               if trigger.id == 'nouveau' else this.attributes.get('precedent_km') }}
+
+  # Historique des 10 derniers trajets et records, mis à jour à chaque fin de trajet.
+  # Un trajet repris remplace la ligne du trajet qu'il prolonge (remplace_id).
   - triggers:
       - trigger: event
         event_type: voiture_trajet_termine
@@ -259,9 +413,21 @@ template:
       - name: Voiture historique des trajets
         unique_id: voiture_historique_trajets
         icon: mdi:history
-        state: "{{ [(this.attributes.get('trajets') or []) | length + 1, 10] | min }}"
+        state: >-
+          {% set r = trigger.event.data.remplace_id | default(none) %}
+          {% set ns = namespace(n=1) %}
+          {% for e in this.attributes.get('trajets') or [] %}
+            {% if r is none or e.id is not defined or e.id | string != r | string %}{% set ns.n = ns.n + 1 %}{% endif %}
+          {% endfor %}
+          {{ [ns.n, 10] | min }}
         attributes:
-          trajets: "{{ ((this.attributes.get('trajets') or []) + [trigger.event.data])[-10:] }}"
+          trajets: >-
+            {% set r = trigger.event.data.remplace_id | default(none) %}
+            {% set ns = namespace(l=[]) %}
+            {% for e in this.attributes.get('trajets') or [] %}
+              {% if r is none or e.id is not defined or e.id | string != r | string %}{% set ns.l = ns.l + [e] %}{% endif %}
+            {% endfor %}
+            {{ (ns.l + [trigger.event.data])[-10:] }}
       - name: Voiture records
         unique_id: voiture_records
         icon: mdi:trophy
@@ -279,14 +445,40 @@ template:
           plus_long_trajet: "{{ [this.attributes.get('plus_long_trajet') or 0, trigger.event.data.distance_km or 0] | max }}"
           meilleur_score_eco: "{{ [this.attributes.get('meilleur_score_eco') or 0, trigger.event.data.eco_score or 0] | max }}"
 
+  # Titre en cours lu dans la notification du lecteur (Deezer, Spotify…) : le capteur
+  # media session de l'appli compagnon reste vide sur l'autoradio. On ne garde que
+  # les notifications de lecture (MediaStyle), les autres ne l'effacent pas.
+  - triggers:
+      - trigger: state
+        entity_id: sensor.mycar_last_notification
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ trigger.to_state is not none
+             and 'MediaStyle' in (trigger.to_state.attributes.get('android.template') or '') }}
+    sensor:
+      - name: Voiture musique
+        unique_id: voiture_musique
+        icon: mdi:music
+        state: >-
+          {% set t = trigger.to_state.attributes.get('android.title') %}
+          {{ (t if t not in [none, 'null', ''] else 'Inconnu') | string | truncate(250) }}
+        attributes:
+          artiste: >-
+            {% set a = trigger.to_state.attributes.get('android.text') %}
+            {{ a if a not in [none, 'null'] else '' }}
+          appli: "{{ trigger.to_state.attributes.get('package', '') }}"
+
+# Entités créées : sensor.voiture_km_cette_semaine, sensor.voiture_km_ce_mois,
+# sensor.voiture_carburant_ce_mois (Home Assistant les nomme d'après « name »)
 utility_meter:
   voiture_km_semaine:
     name: Voiture km cette semaine
-    source: sensor.voiture_kilometrage
+    source: sensor.voiture_distance_parcourue
     cycle: weekly
   voiture_km_mois:
     name: Voiture km ce mois
-    source: sensor.voiture_kilometrage
+    source: sensor.voiture_distance_parcourue
     cycle: monthly
   voiture_carburant_mois:
     name: Voiture carburant ce mois
@@ -294,22 +486,178 @@ utility_meter:
     cycle: monthly
 
 # ─── Scripts ─────────────────────────────────────────────────────────────────
+# Envoie au webhook de l'appli le message qu'elle envoie elle-même à la déconnexion :
+# tous les capteurs de mesure passent « indisponible » au lieu de rester figés.
+rest_command:
+  voiture_hors_ligne:
+    url: "http://127.0.0.1:8123/api/webhook/{{ states('input_text.voiture_webhook_id') | trim }}"
+    method: post
+    content_type: application/json
+    payload: '{"available": false, "ts": {{ (now().timestamp() * 1000) | int }}, "device": "home-assistant", "pids": {}}'
+
 script:
+  # Annonces sur les haut-parleurs de l'autoradio, dites par Igor à sa façon (son prompt,
+  # sa mémoire). Le message reçu décrit l'événement ; s'il ne répond pas, il est dit tel quel.
   voiture_annonce:
     alias: Voiture — annonce vocale
     mode: queued
+    max: 10
     fields:
       message:
-        description: Texte à dire
+        description: Événement à annoncer
+    variables:
+      agent_ia: conversation.igor
     sequence:
       - condition: state
         entity_id: input_boolean.voiture_annonces
         state: "on"
+      - if:
+          - condition: template
+            value_template: "{{ states[agent_ia] is not none }}"
+        then:
+          - action: conversation.process
+            continue_on_error: true
+            data:
+              agent_id: "{{ agent_ia }}"
+              language: fr
+              text: >-
+                Annonce vocale automatique de ma voiture (Peugeot 407 2.0 HDi) : ta réponse
+                sera lue à voix haute sur les haut-parleurs pendant que je conduis.
+                Dis-moi ceci à ta façon, en une seule phrase courte, sans question, sans emoji
+                ni mise en forme, sans déclencher aucune action ni notification.
+                Événement : {{ message }}
+            response_variable: igor
+          - action: script.voiture_dire
+            data:
+              message: >-
+                {% set r = igor.response.speech.plain.speech
+                   if igor is defined and igor.response is defined
+                      and igor.response.response_type != 'error' else '' %}
+                {{ r if r and r | trim | length > 0 else message }}
+        else:
+          - action: script.voiture_dire
+            data:
+              message: "{{ message }}"
+
+  # Lecture par la synthèse vocale de l'autoradio (appli compagnon « MyCar »)
+  voiture_dire:
+    alias: Voiture — lecture à voix haute
+    mode: queued
+    max: 10
+    fields:
+      message:
+        description: Texte à lire
+    sequence:
       - action: notify.mobile_app_mycar
         data:
           message: TTS
           data:
             tts_text: "{{ message }}"
+
+  # Toutes les notifications passent par ici. Igor (agent de conversation, intégration
+  # « Igor ») reformule chaque alerte avec son contexte et sa mémoire ; s'il ne répond
+  # pas ou n'est pas installé, le message brut part quand même.
+  voiture_notifier:
+    alias: Voiture — notification
+    mode: queued
+    max: 20
+    fields:
+      titre:
+        description: Titre
+      message:
+        description: Message
+      latitude:
+        description: Position à joindre (facultatif)
+      longitude:
+        description: Position à joindre (facultatif)
+    variables:
+      agent_ia: conversation.igor
+    sequence:
+      - if:
+          - condition: template
+            value_template: "{{ states[agent_ia] is not none }}"
+        then:
+          - action: conversation.process
+            continue_on_error: true
+            data:
+              agent_id: "{{ agent_ia }}"
+              language: fr
+              text: >-
+                Notification automatique de ma voiture (Peugeot 407 2.0 HDi), que je vais
+                recevoir sur Telegram. Réécris-la en français en un message court (3 phrases
+                maximum), en ajoutant ce que tu sais d'utile (historique, gravité, quoi faire).
+                Ne pose pas de question, n'envoie aucune notification toi-même et ne déclenche
+                aucune action : réponds seulement par le texte du message.
+                Titre : {{ titre | default('') }}
+                Message : {{ message }}
+            response_variable: igor
+          - action: script.voiture_envoyer
+            data:
+              titre: "{{ titre | default('') }}"
+              latitude: "{{ latitude | default('') }}"
+              longitude: "{{ longitude | default('') }}"
+              message: >-
+                {% set r = igor.response.speech.plain.speech
+                   if igor is defined and igor.response is defined
+                      and igor.response.response_type != 'error' else '' %}
+                {{ r if r and r | trim | length > 0 else message }}
+        else:
+          - action: script.voiture_envoyer
+            data:
+              titre: "{{ titre | default('') }}"
+              latitude: "{{ latitude | default('') }}"
+              longitude: "{{ longitude | default('') }}"
+              message: "{{ message }}"
+
+  # Envoi sur notify.rappels. Le bot Telegram crée une entité (action notify.send_message) ;
+  # un groupe de notifications ou l'appli mobile crée une action notify.rappels : les deux marchent.
+  voiture_envoyer:
+    alias: Voiture — envoi de notification
+    mode: queued
+    max: 20
+    fields:
+      titre:
+        description: Titre
+      message:
+        description: Message
+      latitude:
+        description: Position à joindre (facultatif)
+      longitude:
+        description: Position à joindre (facultatif)
+    variables:
+      position: "{{ latitude | default('') | is_number and longitude | default('') | is_number }}"
+      telegram: "{{ integration_entities('telegram_bot') | length > 0 }}"
+      # Sans bot Telegram, la position part en lien de carte dans le texte
+      texte: >-
+        {{ message }}{% if position and not telegram %}
+        📍 https://maps.google.com/?q={{ latitude }},{{ longitude }}{% endif %}
+    sequence:
+      - if:
+          - condition: template
+            value_template: "{{ states.notify.rappels is not none }}"
+        then:
+          - action: notify.send_message
+            target:
+              entity_id: notify.rappels
+            data:
+              title: "{{ titre | default('') }}"
+              message: "{{ texte }}"
+        else:
+          - action: notify.rappels
+            data:
+              title: "{{ titre | default('') }}"
+              message: "{{ texte }}"
+      # Épingle sur la carte, juste sous le message (bot Telegram)
+      - if:
+          - condition: template
+            value_template: "{{ position and telegram }}"
+        then:
+          - action: telegram_bot.send_location
+            continue_on_error: true
+            data:
+              latitude: "{{ latitude | float }}"
+              longitude: "{{ longitude | float }}"
+              disable_notification: true
 
   voiture_alerte:
     alias: Voiture — alerte (téléphone + autoradio)
@@ -322,9 +670,9 @@ script:
       vocal:
         description: Texte dit sur l'autoradio (facultatif)
     sequence:
-      - action: notify.notify
+      - action: script.voiture_notifier
         data:
-          title: "{{ titre }}"
+          titre: "{{ titre }}"
           message: "{{ message }}"
       - if:
           - condition: template
@@ -439,7 +787,8 @@ script:
 # ─── Automatisations ─────────────────────────────────────────────────────────
 automation:
   # Enregistre un trajet une seule fois : quand l'appli le déclare fini, ou quand il ne
-  # bouge plus depuis 3 minutes (autoradio éteint avec le contact)
+  # bouge plus depuis 3 minutes (même valeur que la pause de l'appli, TripTracker.PAUSE_MS).
+  # Un trajet repris (« Reprendre le trajet ») est fusionné avec celui qu'il prolonge.
   - id: voiture_fin_de_trajet
     alias: Voiture — fin de trajet
     mode: single
@@ -451,7 +800,8 @@ automation:
         value_template: >-
           {% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}
           {{ t is mapping and t.id | string != states('input_text.voiture_dernier_trajet_id')
-             and (not t.active or (now() - states.sensor.peugeot_407_trajet.last_updated).total_seconds() > 180)
+             and (not t.active
+                  or (now() - states.sensor.peugeot_407_trajet.last_updated).total_seconds() > 3 * 60)
              and ((t.distance_km or 0) >= 0.3 or (t.duration_min or 0) >= 2) }}
     actions:
       - variables:
@@ -459,12 +809,14 @@ automation:
           correction: "{{ states('input_text.voiture_correction_conso') | float(1) }}"
           prix: "{{ states('input_number.voiture_prix_gasoil') | float(0) }}"
           litres: "{{ ((t.fuel_l or 0) * correction) | round(2) }}"
-          trajet:
+          # Ce trajet seul ; « trajet » ci-dessous = fusionné avec le précédent s'il a été repris
+          seul:
+            id: "{{ t.id }}"
             debut: "{{ (t.start / 1000) | timestamp_local }}"
             fin: "{{ (t.end / 1000) | timestamp_local }}"
             distance_km: "{{ t.distance_km }}"
-            duree_min: "{{ t.duration_min }}"
-            vitesse_moy: "{{ t.avg_kmh }}"
+            duree_min: "{{ t.engine_min if t.engine_min is defined else t.duration_min }}"
+            vitesse_moy: "{{ (t.distance_km / t.driving_min * 60) | round(1) if (t.driving_min or 0) > 0 else t.avg_kmh }}"
             max_kmh: "{{ t.max_kmh }}"
             litres: "{{ litres }}"
             l100: "{{ (litres / t.distance_km * 100) | round(1) if t.distance_km >= 1 else none }}"
@@ -476,6 +828,38 @@ automation:
             demarrage_v: "{{ t.crank_v }}"
             t0_100: "{{ t.t0_100 }}"
             t80_120: "{{ t.t80_120 }}"
+          precedent: >-
+            {% set r = states('input_text.voiture_trajet_repris_id').split('|') %}
+            {% set ns = namespace(p=none) %}
+            {% if r | length == 2 and r[0] == t.id | string %}
+              {% for e in state_attr('sensor.voiture_historique_des_trajets', 'trajets') or [] %}
+                {% if e.id is defined and e.id | string == r[1] %}{% set ns.p = e %}{% endif %}
+              {% endfor %}
+            {% endif %}
+            {{ ns.p }}
+          trajet: >-
+            {% set s = seul %}{% set p = precedent %}
+            {% if p is mapping %}
+              {% set d = (p.distance_km or 0) + (s.distance_km or 0) %}
+              {% set hp = p.distance_km / p.vitesse_moy if (p.vitesse_moy or 0) > 0 else 0 %}
+              {% set hs = s.distance_km / s.vitesse_moy if (s.vitesse_moy or 0) > 0 else 0 %}
+              {% set l = ((p.litres or 0) + (s.litres or 0)) | round(2) %}
+              {% set t0 = [p.t0_100, s.t0_100] | reject('none') | list %}
+              {% set t8 = [p.t80_120, s.t80_120] | reject('none') | list %}
+              {{ {'id': s.id, 'debut': p.debut, 'fin': s.fin, 'distance_km': d | round(2),
+                  'duree_min': ((p.duree_min or 0) + (s.duree_min or 0)) | round(1),
+                  'vitesse_moy': ((d / (hp + hs)) | round(1)) if hp + hs > 0 else s.vitesse_moy,
+                  'max_kmh': [p.max_kmh or 0, s.max_kmh or 0] | max, 'litres': l,
+                  'l100': ((l / d * 100) | round(1)) if d >= 1 else none,
+                  'cout': ((p.cout or 0) + (s.cout or 0)) | round(2),
+                  'eco_score': (((p.eco_score or 0) * (p.distance_km or 0) + (s.eco_score or 0) * (s.distance_km or 0)) / d) | round(0) | int if d > 0 else s.eco_score,
+                  'accelerations': (p.accelerations or 0) + (s.accelerations or 0),
+                  'freinages': (p.freinages or 0) + (s.freinages or 0),
+                  'ralenti_min': ((p.ralenti_min or 0) + (s.ralenti_min or 0)) | round(1),
+                  'demarrage_v': p.demarrage_v,
+                  't0_100': t0 | min if t0 else none, 't80_120': t8 | min if t8 else none,
+                  'remplace_id': p.id, 'repris': true} }}
+            {% else %}{{ dict(s, remplace_id=none, repris=false) }}{% endif %}
       - action: input_text.set_value
         target:
           entity_id: input_text.voiture_dernier_trajet_id
@@ -488,6 +872,11 @@ automation:
           value: "{{ (states('input_number.voiture_kilometrage') | float(0) + t.distance_km) | round(1) }}"
       - action: input_number.set_value
         target:
+          entity_id: input_number.voiture_distance_cumulee
+        data:
+          value: "{{ (states('input_number.voiture_distance_cumulee') | float(0) + t.distance_km) | round(2) }}"
+      - action: input_number.set_value
+        target:
           entity_id: input_number.voiture_carburant_total
         data:
           value: "{{ (states('input_number.voiture_carburant_total') | float(0) + litres) | round(2) }}"
@@ -496,8 +885,19 @@ automation:
           entity_id: input_number.voiture_carburant_brut_depuis_plein
         data:
           value: "{{ (states('input_number.voiture_carburant_brut_depuis_plein') | float(0) + (t.fuel_l or 0)) | round(2) }}"
+      - if:
+          - condition: template
+            value_template: "{{ trajet.repris }}"
+        then:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.voiture_trajet_repris_id
+            data:
+              value: ""
       - event: voiture_trajet_termine
         event_data:
+          id: "{{ trajet.id }}"
+          remplace_id: "{{ trajet.remplace_id }}"
           debut: "{{ trajet.debut }}"
           fin: "{{ trajet.fin }}"
           distance_km: "{{ trajet.distance_km }}"
@@ -519,14 +919,63 @@ automation:
             entity_id: input_boolean.voiture_notif_fin_trajet
             state: "on"
         then:
-          - action: notify.notify
+          - action: script.voiture_notifier
             data:
-              title: "🚗 Trajet terminé"
+              latitude: "{{ state_attr('device_tracker.peugeot_407', 'latitude') }}"
+              longitude: "{{ state_attr('device_tracker.peugeot_407', 'longitude') }}"
+              titre: "{{ '🚗 Trajet repris terminé' if trajet.repris else '🚗 Trajet terminé' }}"
               message: >-
-                {{ trajet.distance_km | round(1) }} km · {{ trajet.duree_min | round(0) | int }} min ·
+                {{ 'Au total : ' if trajet.repris }}{{ trajet.distance_km | round(1) }} km · {{ trajet.duree_min | round(0) | int }} min ·
                 {{ trajet.vitesse_moy | round(0) | int }} km/h de moyenne
                 {%- if trajet.l100 %} · {{ trajet.l100 }} L/100 · {{ trajet.cout }} €{% endif %}
                 · éco {{ trajet.eco_score }}/100
+
+  # « Reprendre le trajet » : le trajet en cours prolongera le précédent (fusion à sa fin)
+  - id: voiture_reprendre_le_trajet
+    alias: Voiture — reprendre le trajet
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: input_button.voiture_reprendre_le_trajet
+    conditions:
+      - condition: template
+        value_template: >-
+          {% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}
+          {{ t is mapping and t.active
+             and state_attr('binary_sensor.voiture_reprise_proposee', 'precedent_id') is not none
+             and (now() - states.binary_sensor.voiture_reprise_proposee.last_changed).total_seconds() < 90 }}
+    actions:
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.voiture_trajet_repris_id
+        data:
+          value: >-
+            {{ state_attr('sensor.peugeot_407_trajet', 'trajet').id }}|{{ state_attr('binary_sensor.voiture_reprise_proposee', 'precedent_id') }}
+      - action: script.voiture_annonce
+        data:
+          message: Le trajet précédent est repris, les deux seront regroupés.
+
+  # Plus de données depuis 2 min (garage sans réseau, autoradio éteint) :
+  # vitesse, régime, température… passent « indisponible » au lieu de garder la dernière valeur
+  - id: voiture_capteurs_hors_ligne
+    alias: Voiture — capteurs indisponibles hors ligne
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.voiture_en_ligne
+        to: "off"
+      - trigger: homeassistant
+        event: start
+    conditions:
+      - condition: state
+        entity_id: binary_sensor.voiture_en_ligne
+        state: "off"
+      - condition: template
+        value_template: >-
+          {{ states('input_text.voiture_webhook_id') | trim | length > 10
+             and states('sensor.peugeot_407_vitesse') not in ['unavailable', 'unknown'] }}
+    actions:
+      - action: rest_command.voiture_hors_ligne
 
   # Batterie au démarrage (chute de tension pendant que le démarreur tourne)
   - id: voiture_batterie_demarrage
@@ -550,7 +999,7 @@ automation:
           message: >-
             La tension est descendue à {{ state_attr('sensor.peugeot_407_trajet', 'trajet').crank_v }} V au démarrage
             (normal : plus de 10 V). Faites tester la batterie.
-          vocal: Attention, la batterie a du mal au démarrage.
+          vocal: La batterie a eu du mal au démarrage, la tension est tombée bas.
 
   - id: voiture_moteur_froid
     alias: Voiture — moteur froid sollicité
@@ -565,7 +1014,9 @@ automation:
     actions:
       - action: script.voiture_annonce
         data:
-          message: Moteur froid, vas-y doucement.
+          message: >-
+            Moteur encore froid ({{ states('sensor.peugeot_407_temperature_liquide_de_refroidissement') | int(0) }} °C)
+            et régime élevé ({{ states('sensor.peugeot_407_regime_moteur') | int(0) }} tr/min) : il faut y aller doucement.
       - delay:
           minutes: 3
 
@@ -582,7 +1033,7 @@ automation:
     actions:
       - action: script.voiture_annonce
         data:
-          message: Moteur chaud, tu peux y aller.
+          message: Le moteur vient d'atteindre sa température ({{ states('sensor.peugeot_407_temperature_liquide_de_refroidissement') | int(0) }} °C), on peut solliciter le moteur.
 
   - id: voiture_surchauffe
     alias: Voiture — surchauffe moteur
@@ -600,7 +1051,7 @@ automation:
           message: >-
             Température moteur : {{ states('sensor.peugeot_407_temperature_liquide_de_refroidissement') }} °C.
             Arrêtez-vous dès que possible et vérifiez le liquide de refroidissement.
-          vocal: Attention, le moteur chauffe. Arrête-toi dès que possible.
+          vocal: Surchauffe moteur à {{ states('sensor.peugeot_407_temperature_liquide_de_refroidissement') | int(0) }} °C, il faut s'arrêter dès que possible.
 
   - id: voiture_alternateur
     alias: Voiture — alternateur faible
@@ -619,7 +1070,7 @@ automation:
           message: >-
             {{ states('sensor.peugeot_407_tension_batterie') }} V moteur tournant (normal : 13,5 à 14,8 V).
             Alternateur ou courroie à vérifier.
-          vocal: Attention, la batterie ne se recharge pas correctement.
+          vocal: Moteur tournant, la batterie ne se recharge pas correctement ({{ states('sensor.peugeot_407_tension_batterie') }} V), l'alternateur est peut-être en cause.
       - delay:
           minutes: 30
 
@@ -658,9 +1109,16 @@ automation:
              and trigger.to_state.state | is_number
              and trigger.to_state.state | int > trigger.from_state.state | int }}
     actions:
-      - action: script.voiture_annonce
+      - action: script.voiture_alerte
         data:
-          message: Nouveau défaut moteur détecté.
+          titre: "🔴 Nouveau défaut moteur"
+          message: >-
+            {% set codes = state_attr('sensor.peugeot_407_nombre_de_defauts', 'codes') or [] %}
+            {% if codes %}{% for c in codes %}{{ c.code }} : {{ c.description }}{{ ' · ' if not loop.last }}{% endfor %}
+            {% else %}{{ states('sensor.peugeot_407_codes_defaut') }}{% endif %}
+            {{- ' · Voyant moteur allumé' if is_state('binary_sensor.peugeot_407_voyant_moteur', 'on') }}
+          vocal: >-
+            Nouveau défaut moteur détecté : {{ states('sensor.peugeot_407_codes_defaut') }}.
 
   - id: voiture_annonce_limite
     alias: Voiture — annonce de la limitation
@@ -677,7 +1135,7 @@ automation:
     actions:
       - action: script.voiture_annonce
         data:
-          message: "Limite {{ trigger.to_state.state | int }}."
+          message: "La limitation de vitesse passe à {{ trigger.to_state.state | int }} km/h (annonce très courte)."
 
   - id: voiture_rappel_entretien
     alias: Voiture — rappels d'entretien
@@ -690,18 +1148,18 @@ automation:
             {% set r = namespace(l=[]) %}
             {% set v = states('sensor.voiture_vidange') | float(99999) %}
             {% set vj = state_attr('sensor.voiture_vidange', 'jours_restants') %}
-            {% if v < 500 or (vj is number and vj < 30) %}{% set r.l = r.l + ['Vidange : ' ~ (v | int) ~ ' km' ~ (' / ' ~ vj ~ ' j' if vj is number else '')] %}{% endif %}
-            {% for e, n in [('sensor.voiture_filtre_a_gasoil', 'Filtre à gasoil'), ('sensor.voiture_filtre_a_air', 'Filtre à air'), ('sensor.voiture_distribution', 'Distribution')] %}
-              {% if states(e) | float(99999) < 1000 %}{% set r.l = r.l + [n ~ ' : ' ~ (states(e) | int) ~ ' km'] %}{% endif %}
+            {% if states('input_number.voiture_vidange_km') | float(0) > 0 and (v < 500 or (vj is number and vj < 30)) %}{% set r.l = r.l + ['Vidange : ' ~ (v | int) ~ ' km' ~ (' / ' ~ vj ~ ' j' if vj is number else '')] %}{% endif %}
+            {% for e, n, saisi in [('sensor.voiture_filtre_a_gasoil', 'Filtre à gasoil', 'input_number.voiture_filtre_gasoil_km'), ('sensor.voiture_filtre_a_air', 'Filtre à air', 'input_number.voiture_filtre_air_km'), ('sensor.voiture_distribution', 'Distribution', 'input_number.voiture_distribution_km')] %}
+              {% if states(saisi) | float(0) > 0 and states(e) | float(99999) < 1000 %}{% set r.l = r.l + [n ~ ' : ' ~ (states(e) | int) ~ ' km'] %}{% endif %}
             {% endfor %}
             {% set ct = states('sensor.voiture_controle_technique') %}
-            {% if ct | is_number and ct | int < 30 %}{% set r.l = r.l + ['Contrôle technique dans ' ~ ct ~ ' jours'] %}{% endif %}
+            {% if ct | is_number and ct | int != 0 and -365 < ct | int < 30 %}{% set r.l = r.l + ['Contrôle technique dans ' ~ ct ~ ' jours'] %}{% endif %}
             {{ r.l }}
       - condition: template
         value_template: "{{ rappels | length > 0 }}"
-      - action: notify.notify
+      - action: script.voiture_notifier
         data:
-          title: "🔧 Entretien de la voiture"
+          titre: "🔧 Entretien de la voiture"
           message: "{{ rappels | join('\n') }}"
 
   # ── Domotique (exemples à adapter, désactivés) ──
@@ -709,7 +1167,7 @@ automation:
   #   alias: Voiture — arrivée à la maison
   #   triggers:
   #     - trigger: zone
-  #       entity_id: device_tracker.mycar
+  #       entity_id: device_tracker.peugeot_407
   #       zone: zone.home
   #       event: enter
   #   actions:

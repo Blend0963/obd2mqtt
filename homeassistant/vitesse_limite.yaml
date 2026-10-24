@@ -1,0 +1,34 @@
+# /config/packages/vitesse_limite.yaml
+# Limitation de vitesse de la route où se trouve la voiture, d'après OpenStreetMap.
+# Mise à jour toutes les 15 s, seulement quand la voiture roule (service gratuit : on ne
+# l'interroge pas voiture garée).
+rest:
+  - resource_template: >-
+      https://overpass-api.de/api/interpreter?data=[out:json][timeout:10];way(around:20,{{ state_attr('device_tracker.peugeot_407', 'latitude') }},{{ state_attr('device_tracker.peugeot_407', 'longitude') }})[highway][maxspeed];out tags 1;
+    scan_interval: 86400
+    sensor:
+      - name: Vitesse limite
+        unique_id: voiture_vitesse_limite
+        unit_of_measurement: km/h
+        icon: mdi:sign-caution
+        value_template: >-
+          {% set w = value_json.elements | default([]) %}
+          {% set m = (w[0].tags.maxspeed if w else '') | string %}
+          {% set types = {'FR:urban': 50, 'FR:rural': 80, 'FR:motorway': 130, 'FR:zone30': 30, 'FR:walk': 20} %}
+          {{ types.get(m, m | int(0)) or none }}
+
+automation:
+  - id: voiture_vitesse_limite_maj
+    alias: Voiture — mise à jour de la vitesse limite
+    mode: single
+    triggers:
+      - trigger: time_pattern
+        seconds: /15
+    conditions:
+      - condition: numeric_state
+        entity_id: sensor.peugeot_407_vitesse
+        above: 5
+    actions:
+      - action: homeassistant.update_entity
+        target:
+          entity_id: sensor.vitesse_limite

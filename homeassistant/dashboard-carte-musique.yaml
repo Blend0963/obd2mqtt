@@ -1,0 +1,61 @@
+type: custom:stack-in-card
+mode: vertical
+card_mod:
+  style: |
+    ha-card {
+      box-shadow: none;
+    }
+cards:
+- type: custom:mushroom-template-card
+  icon: mdi:music
+  icon_color: '{{ ''purple'' if is_state(''sensor.mycar_media_session'', ''Playing'') else ''grey'' }}'
+  primary: '{% set s = states.sensor.mycar_media_session %}{% set m = namespace(titre='''', artiste='''') %}{% for k, v in (s.attributes.items() if s else []) %}{% if k.startswith(''media_title'') and v and not m.titre %}{% set m.titre = v %}{% endif %}{% if k.startswith(''media_artist'') and v and not m.artiste %}{% set m.artiste = v %}{% endif %}{% endfor %}{% set n = states.sensor.voiture_musique %}{% if not m.titre and n and n.state not in [''unknown'', ''unavailable'', ''Inconnu''] %}{% set m.titre = n.state %}{% set m.artiste = n.attributes.get(''artiste'', '''') %}{% endif %}{{ m.titre or ''Rien en lecture'' }}'
+  secondary: '{% set s = states.sensor.mycar_media_session %}{% set m = namespace(titre='''', artiste='''') %}{% for k, v in (s.attributes.items() if s else []) %}{% if k.startswith(''media_title'') and v and not m.titre %}{% set m.titre = v %}{% endif %}{% if k.startswith(''media_artist'') and v and not m.artiste %}{% set m.artiste = v %}{% endif %}{% endfor %}{% set n = states.sensor.voiture_musique %}{% if not m.titre and n and n.state not in [''unknown'', ''unavailable'', ''Inconnu''] %}{% set m.titre = n.state %}{% set m.artiste = n.attributes.get(''artiste'', '''') %}{% endif %}{% set artiste = m.artiste %}{{ artiste ~ '' · '' if artiste else '''' }}{{ ''En lecture'' if is_state(''sensor.mycar_media_session'', ''Playing'') else ''En pause'' }}'
+  tap_action:
+    action: url
+    url_path: app://deezer.android.app
+- type: custom:mushroom-chips-card
+  alignment: center
+  card_mod:
+    style: |
+      ha-card {
+        margin-top: -14px;
+        padding-bottom: 8px;
+        --chip-box-shadow: none;
+        --chip-border-width: 0;
+        --chip-background: none;
+      }
+  chips:
+  - type: template
+    icon: mdi:skip-previous
+    tap_action:
+      action: perform-action
+      perform_action: notify.mobile_app_mycar
+      data:
+        message: command_media
+        data:
+          media_command: previous
+          media_package_name: deezer.android.app
+  - type: template
+    icon: '{{ ''mdi:pause'' if is_state(''sensor.mycar_media_session'', ''Playing'') else ''mdi:play'' }}'
+    icon_color: purple
+    tap_action:
+      action: perform-action
+      perform_action: notify.mobile_app_mycar
+      data:
+        message: command_media
+        data:
+          media_command: play_pause
+          media_package_name: deezer.android.app
+  - type: template
+    icon: mdi:skip-next
+    tap_action:
+      action: perform-action
+      perform_action: notify.mobile_app_mycar
+      data:
+        message: command_media
+        data:
+          media_command: next
+          media_package_name: deezer.android.app
+grid_options:
+  columns: 12

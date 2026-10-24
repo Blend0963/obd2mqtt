@@ -116,8 +116,8 @@ La **consommation** est estimée à partir du débit d'air (et de la sonde lambd
 
 Fichiers dans `homeassistant/` :
 1. `peugeot_407-ajout-trajet.yaml` : trois capteurs à ajouter au paquet du webhook (inutile si vous recopiez la configuration depuis l'application).
-2. `voiture_carnet.yaml` : à copier dans `/config/packages/` (kilométrage, entretien — vidange tous les 10 000 km ou 1 an —, filtres, distribution, contrôle technique, carburant et coûts, historique, records, alertes moteur / turbo / alternateur / batterie, annonces vocales sur l'autoradio). Adaptez `notify.mobile_app_mycar` et `notify.notify` en tête du fichier, puis redémarrez Home Assistant.
-3. `carnet-dashboard.yaml` : la vue « Carnet » à coller dans le tableau de bord.
+2. `voiture_carnet.yaml` : à copier dans `/config/packages/` (kilométrage, entretien — vidange tous les 10 000 km ou 1 an —, filtres, distribution, contrôle technique, carburant et coûts, historique, records, alertes moteur / turbo / alternateur / batterie, annonces vocales sur l'autoradio). Adaptez `notify.mobile_app_mycar` (autoradio) et `notify.rappels` (téléphone) en tête du fichier, puis redémarrez Home Assistant. `vitesse_limite.yaml` (même dossier) fournit la limitation de vitesse d'après OpenStreetMap.
+3. `dashboard-voiture.yaml` : le tableau de bord complet (Aperçu avec carte GPS, Conduite, Moteur, Batterie, Diagnostic, Historique, Mesures, Carnet), à coller en entier dans l'éditeur de configuration brute. Il utilise les cartes HACS Mushroom, modern-circular-gauge, mini-graph-card, clock-weather-card, Stack In Card, card-mod et kiosk-mode, et la carte `voiture-gps-card.js`.
 
 Au premier lancement, recalez le **kilométrage** sur le compteur de la voiture et renseignez les kilométrages des derniers entretiens et la date du prochain contrôle technique.
 

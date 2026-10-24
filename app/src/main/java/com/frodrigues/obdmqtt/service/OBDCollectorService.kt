@@ -34,6 +34,7 @@ import com.frodrigues.obdmqtt.settings.PublishMode
 import com.frodrigues.obdmqtt.settings.dataStore
 import com.frodrigues.obdmqtt.settings.AppConfig
 import com.frodrigues.obdmqtt.trip.Trip
+import com.frodrigues.obdmqtt.trip.TripStore
 import com.frodrigues.obdmqtt.trip.TripTracker
 import com.frodrigues.obdmqtt.webhook.ClearButtonWatcher
 import com.frodrigues.obdmqtt.webhook.HaApiClient
@@ -67,6 +68,8 @@ class OBDCollectorService : LifecycleService() {
     private val binder = LocalBinder()
 
     private lateinit var settings: AppSettings
+    private lateinit var tripStore: TripStore
+    private var tripSavedAtMs = 0L
     private var wakeLock: PowerManager.WakeLock? = null
     private var collectorJob: Job? = null
     /** When collection (re)started: right after the car unit boots the engine is often not started yet. */
@@ -87,6 +90,15 @@ class OBDCollectorService : LifecycleService() {
         pidReadings.value = emptyMap()
         obdProtocolLabel.value = ""
         settings = AppSettings(applicationContext.dataStore)
+        tripStore = TripStore(applicationContext)
+        // The app was killed with the ignition during a stop: the trip goes on if still within the pause
+        tripStore.load()?.let { saved ->
+            val now = System.currentTimeMillis()
+            if (tripTracker.resume(saved, now)) {
+                currentTrip.value = tripTracker.snapshot(now)
+                tripSavedAtMs = saved.endMs  // so it is forgotten when the trip ends
+            } else if (tripTracker.snapshot(now)?.active != true) tripStore.clear()  // too old
+        }
         createNotificationChannel()
         ContextCompat.registerReceiver(
             this,
@@ -115,11 +127,22 @@ class OBDCollectorService : LifecycleService() {
             ACTION_STOP -> {
                 stoppedByUser = true  // the auto-start safety net must not restart it until next boot
                 tripTracker.finishNow()
+                tripStore.clear()
                 currentTrip.value = tripTracker.snapshot(System.currentTimeMillis())
                 stopCollection()
             }
         }
         return START_STICKY
+    }
+
+    /** Running trip saved every few seconds (cheap), forgotten once it has ended. */
+    private fun saveTrip(trip: Trip?, now: Long) {
+        if (trip?.active == true) {
+            if (now - tripSavedAtMs >= TRIP_SAVE_INTERVAL_MS) { tripStore.save(trip); tripSavedAtMs = now }
+        } else if (tripSavedAtMs != 0L) {
+            tripStore.clear()
+            tripSavedAtMs = 0L
+        }
     }
 
     private fun startCollection() {
@@ -353,6 +376,7 @@ class OBDCollectorService : LifecycleService() {
                     tripTracker.onReading(reading.pid, reading.value, reading.timestamp, snapshot)
                     val trip = tripTracker.snapshot(reading.timestamp)
                     currentTrip.value = trip
+                    saveTrip(trip, reading.timestamp)
                     sink.updateTrip(trip)
                     sink.publish(reading, snapshot)
                     lastUpdateTime.value = reading.timestamp
@@ -515,6 +539,7 @@ class OBDCollectorService : LifecycleService() {
         const val DIAG_INTERVAL_MS = 60_000L
         const val CLEAR_REQUEST_MAX_AGE_MS = 2 * 60_000L
         private const val HA_BUTTON_POLL_MS = 15_000L
+        private const val TRIP_SAVE_INTERVAL_MS = 10_000L
 
         private val diagRequests = Channel<DiagRequest>(capacity = 8)
         private val wakeups = Channel<Unit>(Channel.CONFLATED)
