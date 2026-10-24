@@ -265,6 +265,30 @@ views:
       - type: grid
         cards:
           - type: custom:mushroom-template-card
+            primary: Parler à Igor
+            secondary: Appuyer, puis parler
+            icon: mdi:microphone
+            icon_color: deep-purple
+            tap_action:
+              action: assist
+              pipeline_id: preferred
+              start_listening: true
+            hold_action:
+              action: assist
+              pipeline_id: preferred
+              start_listening: true
+            grid_options:
+              columns: 12
+              rows: 2
+            card_mod:
+              style: |
+                ha-card {
+                  --mush-icon-size: 64px;
+                  --mush-card-primary-font-size: 24px;
+                  --mush-card-secondary-font-size: 16px;
+                  justify-content: center;
+                }
+          - type: custom:mushroom-template-card
             primary: Téléphone
             icon: mdi:phone
             icon_color: green
