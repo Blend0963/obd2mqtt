@@ -588,14 +588,24 @@ views:
               columns: 6
               rows: 2
           - type: statistic
-            entity: sensor.peugeot_407_vitesse
-            name: Vitesse moyenne
+            entity: sensor.voiture_vitesse_en_roulant
+            name: Vitesse moyenne (en roulant)
             stat_type: mean
             period:
               calendar:
                 period: day
             grid_options:
               columns: 6
+              rows: 2
+          - type: statistic
+            entity: sensor.voiture_regime_moteur_tournant
+            name: Régime moyen (moteur tournant)
+            stat_type: mean
+            period:
+              calendar:
+                period: day
+            grid_options:
+              columns: 12
               rows: 2
   - title: Moteur
     path: moteur
@@ -1105,7 +1115,7 @@ views:
             icon: mdi:car-arrow-right
             icon_color: '{{ ''green'' if is_state(''binary_sensor.voiture_trajet_en_cours'', ''on'') else ''grey'' }}'
             primary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{{ (''Trajet en cours'' if is_state(''binary_sensor.voiture_trajet_en_cours'', ''on'') else ''Dernier trajet'') if t is mapping else ''Aucun trajet'' }}{{ '' · hors ligne'' if is_state(''binary_sensor.voiture_en_ligne'', ''off'') else '''' }}'
-            secondary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{% if t is mapping %}{{ t.distance_km | round(1) }} km · {{ t.duration_min | round(0) | int }} min · {{ t.avg_kmh | round(0) | int }} km/h moy. · max {{ t.max_kmh | int }}{% endif %}'
+            secondary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{% if t is mapping %}{{ t.distance_km | round(1) }} km · {{ t.duration_min | round(0) | int }} min · {{ ((t.distance_km / t.driving_min * 60) if (t.driving_min or 0) > 0 else t.avg_kmh) | round(0) | int }} km/h moy. · max {{ t.max_kmh | int }}{% endif %}'
             grid_options:
               columns: 12
           - type: custom:mushroom-template-card

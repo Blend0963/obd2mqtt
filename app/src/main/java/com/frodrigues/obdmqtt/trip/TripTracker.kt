@@ -32,7 +32,8 @@ data class Trip(
     val fuelL100: Double?,
 ) {
     val durationSeconds: Double get() = (endMs - startMs) / 1000.0
-    val averageSpeedKmh: Double get() = if (durationSeconds > 0) distanceKm / (durationSeconds / 3600) else 0.0
+    /** Over the time spent moving: idling at a light or in a jam doesn't pull it down. */
+    val averageSpeedKmh: Double get() = if (drivingSeconds > 0) distanceKm / (drivingSeconds / 3600) else 0.0
     val litresPer100Km: Double? get() = if (distanceKm >= 1) fuelLitres / distanceKm * 100 else null
     val idlePercent: Double get() = if (durationSeconds > 0) idleSeconds / durationSeconds * 100 else 0.0
 

@@ -37,6 +37,16 @@ class TripTrackerTest {
     }
 
     @Test
+    fun `average speed leaves out the time spent stopped`() {
+        var t = drive(0, List(1201) { 60.0 })  // 10 min at 60 km/h
+        t = drive(t, List(1200) { 0.0 })      // 10 min idling at a standstill
+
+        val trip = tracker.snapshot(t)!!
+        assertEquals(10.0, trip.distanceKm, 0.1)
+        assertEquals(60.0, trip.averageSpeedKmh, 1.0)
+    }
+
+    @Test
     fun `trip ends after a minute with the engine stopped`() {
         var t = drive(0, List(600) { 50.0 })
         t = drive(t, List(130) { 0.0 }, rpm = 0.0)

@@ -224,6 +224,24 @@ template:
         state: >-
           {{ (states('sensor.peugeot_407_pression_rampe_injection') | float(0) / 100) | round(0) }}
 
+      # Pour les moyennes : seulement quand la voiture roule / quand le moteur tourne.
+      # À l'arrêt ou moteur coupé, ils sont « indisponibles » et ne comptent pas.
+      - name: Voiture vitesse en roulant
+        unique_id: voiture_vitesse_en_roulant
+        unit_of_measurement: km/h
+        device_class: speed
+        state_class: measurement
+        icon: mdi:speedometer
+        availability: "{{ states('sensor.peugeot_407_vitesse') | float(0) >= 3 }}"
+        state: "{{ states('sensor.peugeot_407_vitesse') | float(0) }}"
+      - name: Voiture régime moteur tournant
+        unique_id: voiture_regime_moteur_tournant
+        unit_of_measurement: tr/min
+        state_class: measurement
+        icon: mdi:engine
+        availability: "{{ states('sensor.peugeot_407_regime_moteur') | float(0) >= 300 }}"
+        state: "{{ states('sensor.peugeot_407_regime_moteur') | float(0) }}"
+
       - name: Voiture kilométrage
         unique_id: voiture_kilometrage
         unit_of_measurement: km
@@ -699,7 +717,7 @@ automation:
             fin: "{{ (t.end / 1000) | timestamp_local }}"
             distance_km: "{{ t.distance_km }}"
             duree_min: "{{ t.duration_min }}"
-            vitesse_moy: "{{ t.avg_kmh }}"
+            vitesse_moy: "{{ (t.distance_km / t.driving_min * 60) | round(1) if (t.driving_min or 0) > 0 else t.avg_kmh }}"
             max_kmh: "{{ t.max_kmh }}"
             litres: "{{ litres }}"
             l100: "{{ (litres / t.distance_km * 100) | round(1) if t.distance_km >= 1 else none }}"
