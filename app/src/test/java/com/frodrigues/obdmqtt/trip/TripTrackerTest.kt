@@ -47,14 +47,61 @@ class TripTrackerTest {
     }
 
     @Test
-    fun `trip ends after a minute with the engine stopped`() {
+    fun `trip ends once the engine has been stopped longer than the pause`() {
         var t = drive(0, List(600) { 50.0 })
-        t = drive(t, List(130) { 0.0 }, rpm = 0.0)
+        t = drive(t, List(3_610) { 0.0 }, rpm = 0.0)  // engine off for 30 min 5 s
 
         val trip = tracker.snapshot(t)!!
         assertFalse(trip.active)
         assertEquals(300_000, trip.endMs)
         assertEquals(trip, tracker.lastFinished)
+    }
+
+    @Test
+    fun `a fuel stop is a pause, the trip goes on`() {
+        var t = drive(0, List(600) { 50.0 })          // 5 min
+        t = drive(t, List(1_200) { 0.0 }, rpm = 0.0)   // engine off for 10 min, app still reading
+        assertTrue(tracker.snapshot(t)!!.paused)
+        t = drive(t, List(600) { 50.0 })               // 5 more min
+
+        val trip = tracker.snapshot(t)!!
+        assertTrue(trip.active)
+        assertFalse(trip.paused)
+        assertEquals(0L, trip.id)
+        assertEquals(8.3, trip.distanceKm, 0.1)
+        assertEquals(10.0, trip.engineSeconds / 60, 0.2)  // the stop doesn't count
+    }
+
+    @Test
+    fun `no data for a few minutes (car unit off at the pump) keeps the trip`() {
+        drive(0, List(600) { 50.0 })
+        drive(300_000 + 15 * 60_000L, List(600) { 50.0 })
+
+        val trip = tracker.snapshot(300_000 + 20 * 60_000L)!!
+        assertTrue(trip.active)
+        assertEquals(0L, trip.id)
+        assertEquals(8.3, trip.distanceKm, 0.1)
+    }
+
+    @Test
+    fun `a trip saved before the app was killed is resumed within the pause`() {
+        val t = drive(0, List(600) { 50.0 })
+        val saved = TripStore.decode(TripStore.encode(tracker.snapshot(t)!!))!!
+
+        val restarted = TripTracker()
+        assertTrue(restarted.resume(saved, t + 10 * 60_000L))
+        assertTrue(restarted.snapshot(t + 10 * 60_000L)!!.paused)
+        assertFalse(TripTracker().resume(saved, t + 31 * 60_000L))  // too late: a new trip
+    }
+
+    @Test
+    fun `the trip store keeps every total`() {
+        val t = drive(0, (1..12).map { it * 10.0 } + List(600) { 90.0 })
+        val trip = tracker.snapshot(t)!!
+        val back = TripStore.decode(TripStore.encode(trip))!!
+
+        assertEquals(trip.copy(fuelRateLh = null, fuelL100 = null, paused = false), back)
+        assertNull(TripStore.decode("abîmé"))
     }
 
     @Test

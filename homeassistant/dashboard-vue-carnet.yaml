@@ -10,12 +10,12 @@ sections:
     heading: Trajet
     icon: mdi:map-marker-path
   - type: custom:mushroom-template-card
-    icon: mdi:car-arrow-right
-    icon_color: '{{ ''green'' if is_state(''binary_sensor.voiture_trajet_en_cours'', ''on'') else ''grey'' }}'
-    primary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{{ (''Trajet en cours'' if is_state(''binary_sensor.voiture_trajet_en_cours'', ''on'') else ''Dernier trajet'') if t is mapping else ''Aucun trajet'' }}{{ '' · hors ligne'' if is_state(''binary_sensor.voiture_en_ligne'', ''off'') else '''' }}'
-    secondary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{% if t is mapping %}{{ t.distance_km | round(1) }} km · {{ t.duration_min | round(0) | int }} min · {{ t.avg_kmh | round(0) | int }} km/h moy. · max {{ t.max_kmh | int }}{% endif %}'
+    icon_color: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{% set age = (now() - states.sensor.peugeot_407_trajet.last_updated).total_seconds() %}{% set en_pause = t is mapping and t.active and not is_state(''binary_sensor.voiture_trajet_en_cours'', ''on'') and age < 1800 %}{{ ''green'' if is_state(''binary_sensor.voiture_trajet_en_cours'', ''on'') else (''amber'' if en_pause else ''grey'') }}'
+    primary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{% set age = (now() - states.sensor.peugeot_407_trajet.last_updated).total_seconds() %}{% set en_pause = t is mapping and t.active and not is_state(''binary_sensor.voiture_trajet_en_cours'', ''on'') and age < 1800 %}{% if t is not mapping %}Aucun trajet{% elif is_state(''binary_sensor.voiture_trajet_en_cours'', ''on'') %}Trajet en cours{% elif en_pause %}Trajet en pause{% else %}Dernier trajet{% endif %}'
+    secondary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{% if t is mapping %}{{ t.distance_km | round(1) }} km · {{ (t.engine_min if t.engine_min is defined else t.duration_min) | round(0) | int }} min · {{ ((t.distance_km / t.driving_min * 60) if (t.driving_min or 0) > 0 else t.avg_kmh) | round(0) | int }} km/h moy. · max {{ t.max_kmh | int }}{% endif %}'
     grid_options:
       columns: 12
+    icon: mdi:car-arrow-right
   - type: custom:mushroom-template-card
     icon: mdi:gas-station
     icon_color: blue

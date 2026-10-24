@@ -70,6 +70,8 @@ object WebhookPayload {
             append(",\"duration_min\":${n(t.durationSeconds / 60, 1)}")
             append(",\"driving_min\":${n(t.drivingSeconds / 60, 1)}")
             append(",\"idle_min\":${n(t.idleSeconds / 60, 1)}")
+            append(",\"engine_min\":${n(t.engineSeconds / 60, 1)}")
+            append(",\"paused\":${t.paused}")
             append(",\"avg_kmh\":${n(t.averageSpeedKmh, 1)}")
             append(",\"max_kmh\":${n(t.maxSpeedKmh, 0)}")
             append(",\"max_rpm\":${n(t.maxRpm, 0)}")

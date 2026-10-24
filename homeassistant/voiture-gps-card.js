@@ -15,6 +15,7 @@
  *                                                 # avec un attribut location: [lat, lon] (adresse géocodée)
  * speed_entity: sensor.peugeot_407_vitesse        # facultatif : vitesse OBD en km/h
  * speed_limit_entity: sensor.vitesse_limite       # facultatif : panneau de limitation
+ * show_speed: true                               # false : pas de compteur sur la carte
  * zoom: 16                                        # facultatif
  * pitch: 45                                       # inclinaison 3D (0 = vue du dessus)
  * heading_up: true                                # carte orientée dans le sens de la marche
@@ -323,7 +324,7 @@ class VoitureGpsCard extends HTMLElement {
     const over = !isNaN(limit) && kmh > limit + 3;
 
     const speedBox = this._el("speed");
-    speedBox.hidden = false;
+    speedBox.hidden = this._config.show_speed === false;
     speedBox.firstElementChild.textContent = kmh;
     speedBox.classList.toggle("over", over);
 

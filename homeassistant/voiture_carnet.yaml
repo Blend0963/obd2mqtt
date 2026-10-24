@@ -190,7 +190,8 @@ template:
         icon: mdi:map-marker-path
         state: >-
           {% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}
-          {{ t is mapping and t.active and is_state('binary_sensor.voiture_en_ligne', 'on') }}
+          {{ t is mapping and t.active and not t.paused | default(false)
+             and is_state('binary_sensor.voiture_en_ligne', 'on') }}
       - name: Voiture entretien à prévoir
         unique_id: voiture_entretien_a_prevoir
         icon: mdi:wrench-clock
@@ -722,7 +723,9 @@ script:
 # ─── Automatisations ─────────────────────────────────────────────────────────
 automation:
   # Enregistre un trajet une seule fois : quand l'appli le déclare fini, ou quand il ne
-  # bouge plus depuis 3 minutes (autoradio éteint avec le contact)
+  # bouge plus depuis 30 minutes. Un arrêt plus court (station, restaurant, garage sans
+  # réseau puis départ) est une pause : le trajet continue au redémarrage (même valeur
+  # que la pause de l'appli, TripTracker.PAUSE_MS).
   - id: voiture_fin_de_trajet
     alias: Voiture — fin de trajet
     mode: single
@@ -734,7 +737,8 @@ automation:
         value_template: >-
           {% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}
           {{ t is mapping and t.id | string != states('input_text.voiture_dernier_trajet_id')
-             and (not t.active or is_state('binary_sensor.voiture_en_ligne', 'off'))
+             and (not t.active
+                  or (now() - states.sensor.peugeot_407_trajet.last_updated).total_seconds() > 30 * 60)
              and ((t.distance_km or 0) >= 0.3 or (t.duration_min or 0) >= 2) }}
     actions:
       - variables:
@@ -746,7 +750,7 @@ automation:
             debut: "{{ (t.start / 1000) | timestamp_local }}"
             fin: "{{ (t.end / 1000) | timestamp_local }}"
             distance_km: "{{ t.distance_km }}"
-            duree_min: "{{ t.duration_min }}"
+            duree_min: "{{ t.engine_min if t.engine_min is defined else t.duration_min }}"
             vitesse_moy: "{{ (t.distance_km / t.driving_min * 60) | round(1) if (t.driving_min or 0) > 0 else t.avg_kmh }}"
             max_kmh: "{{ t.max_kmh }}"
             litres: "{{ litres }}"
