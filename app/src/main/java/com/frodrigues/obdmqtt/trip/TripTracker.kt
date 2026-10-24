@@ -30,7 +30,7 @@ data class Trip(
     /** Instantaneous consumption, only while the trip is active. */
     val fuelRateLh: Double?,
     val fuelL100: Double?,
-    /** Engine stopped (fuel stop, restaurant) but the trip may still go on: see [TripTracker.PAUSE_MS]. */
+    /** Engine stopped for less than [TripTracker.PAUSE_MS] so far: the trip may still go on. */
     val paused: Boolean = false,
 ) {
     /** Start to end, stops included. */
@@ -59,9 +59,10 @@ data class Trip(
  * Builds trips from the OBD readings: a trip starts when the engine runs (RPM above
  * [RUNNING_RPM]) and ends after [PAUSE_MS] with the engine stopped, or without readings
  * (car units often power off with the ignition, before the engine-off can be seen; HA also
- * closes a trip that stops updating). A shorter stop, at a fuel station or a motorway
- * restaurant, is a pause: the trip goes on when the engine restarts. The running trip is
- * saved ([TripStore]) so a pause survives the app being killed with the ignition.
+ * closes a trip that stops updating). A shorter stop (stalled engine, quick stop) is a pause:
+ * the trip goes on when the engine restarts. Longer stops end the trip; HA offers to resume
+ * it ("Reprendre le trajet") when the car leaves again within 8 h and merges the two. The
+ * running trip is saved ([TripStore]) so a pause survives the app being killed with the ignition.
  *
  * Pure logic, fed with readings and their timestamps, so it is unit-testable.
  */
@@ -301,7 +302,7 @@ class TripTracker {
 
         const val RUNNING_RPM = 300.0
         /** Longest stop (engine off or no data) that doesn't end the trip; same value in HA. */
-        const val PAUSE_MS = 30 * 60_000L
+        const val PAUSE_MS = 3 * 60_000L
         private const val CRANK_WINDOW_MS = 20_000L
         /** Above this the battery never dipped: the start wasn't seen (app connected afterwards). */
         private const val CRANK_DIP_MAX_V = 11.8

@@ -13,6 +13,35 @@ views:
         chips:
           - type: conditional
             conditions:
+              - entity: binary_sensor.voiture_reprise_proposee
+                state: 'on'
+            chip:
+              type: template
+              icon: mdi:play-circle
+              icon_color: white
+              content: Reprendre le trajet de {{ state_attr('binary_sensor.voiture_reprise_proposee', 'precedent_debut') }} · {{ state_attr('binary_sensor.voiture_reprise_proposee', 'precedent_km') }} km
+              tap_action:
+                action: perform-action
+                perform_action: input_button.press
+                target:
+                  entity_id: input_button.voiture_reprendre_le_trajet
+        card_mod:
+          style: |
+            ha-card {
+              --chip-height: 60px;
+              --chip-font-size: 22px;
+              --chip-font-weight: 700;
+              --chip-icon-size: 34px;
+              --chip-padding: 0 22px;
+              --chip-border-radius: 30px;
+              --chip-background: #2e7d32;
+              --primary-text-color: #ffffff;
+            }
+      - type: custom:mushroom-chips-card
+        alignment: start
+        chips:
+          - type: conditional
+            conditions:
               - entity: binary_sensor.voiture_en_ligne
                 state: 'off'
             chip:
@@ -1114,8 +1143,8 @@ views:
             heading: Trajet
             icon: mdi:map-marker-path
           - type: custom:mushroom-template-card
-            icon_color: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{% set age = (now() - states.sensor.peugeot_407_trajet.last_updated).total_seconds() %}{% set en_pause = t is mapping and t.active and not is_state(''binary_sensor.voiture_trajet_en_cours'', ''on'') and age < 1800 %}{{ ''green'' if is_state(''binary_sensor.voiture_trajet_en_cours'', ''on'') else (''amber'' if en_pause else ''grey'') }}'
-            primary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{% set age = (now() - states.sensor.peugeot_407_trajet.last_updated).total_seconds() %}{% set en_pause = t is mapping and t.active and not is_state(''binary_sensor.voiture_trajet_en_cours'', ''on'') and age < 1800 %}{% if t is not mapping %}Aucun trajet{% elif is_state(''binary_sensor.voiture_trajet_en_cours'', ''on'') %}Trajet en cours{% elif en_pause %}Trajet en pause{% else %}Dernier trajet{% endif %}'
+            icon_color: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{% set age = (now() - states.sensor.peugeot_407_trajet.last_updated).total_seconds() %}{% set en_pause = t is mapping and t.active and not is_state(''binary_sensor.voiture_trajet_en_cours'', ''on'') and age < 180 %}{{ ''green'' if is_state(''binary_sensor.voiture_trajet_en_cours'', ''on'') else (''amber'' if en_pause else ''grey'') }}'
+            primary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{% set age = (now() - states.sensor.peugeot_407_trajet.last_updated).total_seconds() %}{% set en_pause = t is mapping and t.active and not is_state(''binary_sensor.voiture_trajet_en_cours'', ''on'') and age < 180 %}{% if t is not mapping %}Aucun trajet{% elif is_state(''binary_sensor.voiture_trajet_en_cours'', ''on'') %}Trajet en cours{% elif en_pause %}Trajet en pause{% else %}Dernier trajet{% endif %}'
             secondary: '{% set t = state_attr(''sensor.peugeot_407_trajet'', ''trajet'') %}{% if t is mapping %}{{ t.distance_km | round(1) }} km · {{ (t.engine_min if t.engine_min is defined else t.duration_min) | round(0) | int }} min · {{ ((t.distance_km / t.driving_min * 60) if (t.driving_min or 0) > 0 else t.avg_kmh) | round(0) | int }} km/h moy. · max {{ t.max_kmh | int }}{% endif %}'
             grid_options:
               columns: 12

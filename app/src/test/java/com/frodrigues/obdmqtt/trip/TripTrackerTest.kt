@@ -49,7 +49,7 @@ class TripTrackerTest {
     @Test
     fun `trip ends once the engine has been stopped longer than the pause`() {
         var t = drive(0, List(600) { 50.0 })
-        t = drive(t, List(3_610) { 0.0 }, rpm = 0.0)  // engine off for 30 min 5 s
+        t = drive(t, List(370) { 0.0 }, rpm = 0.0)  // engine off for 3 min 5 s
 
         val trip = tracker.snapshot(t)!!
         assertFalse(trip.active)
@@ -58,9 +58,9 @@ class TripTrackerTest {
     }
 
     @Test
-    fun `a fuel stop is a pause, the trip goes on`() {
+    fun `a short stop is a pause, the trip goes on`() {
         var t = drive(0, List(600) { 50.0 })          // 5 min
-        t = drive(t, List(1_200) { 0.0 }, rpm = 0.0)   // engine off for 10 min, app still reading
+        t = drive(t, List(240) { 0.0 }, rpm = 0.0)     // engine off for 2 min, app still reading
         assertTrue(tracker.snapshot(t)!!.paused)
         t = drive(t, List(600) { 50.0 })               // 5 more min
 
@@ -73,11 +73,11 @@ class TripTrackerTest {
     }
 
     @Test
-    fun `no data for a few minutes (car unit off at the pump) keeps the trip`() {
+    fun `no data for a couple of minutes (car unit restarting) keeps the trip`() {
         drive(0, List(600) { 50.0 })
-        drive(300_000 + 15 * 60_000L, List(600) { 50.0 })
+        drive(300_000 + 2 * 60_000L, List(600) { 50.0 })
 
-        val trip = tracker.snapshot(300_000 + 20 * 60_000L)!!
+        val trip = tracker.snapshot(300_000 + 7 * 60_000L)!!
         assertTrue(trip.active)
         assertEquals(0L, trip.id)
         assertEquals(8.3, trip.distanceKm, 0.1)
@@ -89,9 +89,19 @@ class TripTrackerTest {
         val saved = TripStore.decode(TripStore.encode(tracker.snapshot(t)!!))!!
 
         val restarted = TripTracker()
-        assertTrue(restarted.resume(saved, t + 10 * 60_000L))
-        assertTrue(restarted.snapshot(t + 10 * 60_000L)!!.paused)
-        assertFalse(TripTracker().resume(saved, t + 31 * 60_000L))  // too late: a new trip
+        assertTrue(restarted.resume(saved, t + 2 * 60_000L))
+        assertTrue(restarted.snapshot(t + 2 * 60_000L)!!.paused)
+        assertFalse(TripTracker().resume(saved, t + 4 * 60_000L))  // too late: a new trip
+    }
+
+    @Test
+    fun `a longer stop ends the trip, the next start is a new one`() {
+        var t = drive(0, List(600) { 50.0 })
+        t = drive(t, List(480) { 0.0 }, rpm = 0.0)  // 4 min engine off
+        t = drive(t, List(10) { 30.0 })
+
+        assertEquals(0L, tracker.lastFinished!!.id)
+        assertTrue(tracker.snapshot(t)!!.id > 0)
     }
 
     @Test
