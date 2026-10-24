@@ -396,16 +396,58 @@ utility_meter:
 
 # ─── Scripts ─────────────────────────────────────────────────────────────────
 script:
+  # Annonces sur les haut-parleurs de l'autoradio, dites par Igor à sa façon (son prompt,
+  # sa mémoire). Le message reçu décrit l'événement ; s'il ne répond pas, il est dit tel quel.
   voiture_annonce:
     alias: Voiture — annonce vocale
     mode: queued
+    max: 10
     fields:
       message:
-        description: Texte à dire
+        description: Événement à annoncer
+    variables:
+      agent_ia: conversation.igor
     sequence:
       - condition: state
         entity_id: input_boolean.voiture_annonces
         state: "on"
+      - if:
+          - condition: template
+            value_template: "{{ states[agent_ia] is not none }}"
+        then:
+          - action: conversation.process
+            continue_on_error: true
+            data:
+              agent_id: "{{ agent_ia }}"
+              language: fr
+              text: >-
+                Annonce vocale automatique de ma voiture (Peugeot 407 2.0 HDi) : ta réponse
+                sera lue à voix haute sur les haut-parleurs pendant que je conduis.
+                Dis-moi ceci à ta façon, en une seule phrase courte, sans question, sans emoji
+                ni mise en forme, sans déclencher aucune action ni notification.
+                Événement : {{ message }}
+            response_variable: igor
+          - action: script.voiture_dire
+            data:
+              message: >-
+                {% set r = igor.response.speech.plain.speech
+                   if igor is defined and igor.response is defined
+                      and igor.response.response_type != 'error' else '' %}
+                {{ r if r and r | trim | length > 0 else message }}
+        else:
+          - action: script.voiture_dire
+            data:
+              message: "{{ message }}"
+
+  # Lecture par la synthèse vocale de l'autoradio (appli compagnon « MyCar »)
+  voiture_dire:
+    alias: Voiture — lecture à voix haute
+    mode: queued
+    max: 10
+    fields:
+      message:
+        description: Texte à lire
+    sequence:
       - action: notify.mobile_app_mycar
         data:
           message: TTS
@@ -731,7 +773,7 @@ automation:
           message: >-
             La tension est descendue à {{ state_attr('sensor.peugeot_407_trajet', 'trajet').crank_v }} V au démarrage
             (normal : plus de 10 V). Faites tester la batterie.
-          vocal: Attention, la batterie a du mal au démarrage.
+          vocal: La batterie a eu du mal au démarrage, la tension est tombée bas.
 
   - id: voiture_moteur_froid
     alias: Voiture — moteur froid sollicité
@@ -746,7 +788,9 @@ automation:
     actions:
       - action: script.voiture_annonce
         data:
-          message: Moteur froid, vas-y doucement.
+          message: >-
+            Moteur encore froid ({{ states('sensor.peugeot_407_temperature_liquide_de_refroidissement') | int(0) }} °C)
+            et régime élevé ({{ states('sensor.peugeot_407_regime_moteur') | int(0) }} tr/min) : il faut y aller doucement.
       - delay:
           minutes: 3
 
@@ -763,7 +807,7 @@ automation:
     actions:
       - action: script.voiture_annonce
         data:
-          message: Moteur chaud, tu peux y aller.
+          message: Le moteur vient d'atteindre sa température ({{ states('sensor.peugeot_407_temperature_liquide_de_refroidissement') | int(0) }} °C), on peut solliciter le moteur.
 
   - id: voiture_surchauffe
     alias: Voiture — surchauffe moteur
@@ -781,7 +825,7 @@ automation:
           message: >-
             Température moteur : {{ states('sensor.peugeot_407_temperature_liquide_de_refroidissement') }} °C.
             Arrêtez-vous dès que possible et vérifiez le liquide de refroidissement.
-          vocal: Attention, le moteur chauffe. Arrête-toi dès que possible.
+          vocal: Surchauffe moteur à {{ states('sensor.peugeot_407_temperature_liquide_de_refroidissement') | int(0) }} °C, il faut s'arrêter dès que possible.
 
   - id: voiture_alternateur
     alias: Voiture — alternateur faible
@@ -800,7 +844,7 @@ automation:
           message: >-
             {{ states('sensor.peugeot_407_tension_batterie') }} V moteur tournant (normal : 13,5 à 14,8 V).
             Alternateur ou courroie à vérifier.
-          vocal: Attention, la batterie ne se recharge pas correctement.
+          vocal: Moteur tournant, la batterie ne se recharge pas correctement ({{ states('sensor.peugeot_407_tension_batterie') }} V), l'alternateur est peut-être en cause.
       - delay:
           minutes: 30
 
@@ -847,7 +891,8 @@ automation:
             {% if codes %}{% for c in codes %}{{ c.code }} : {{ c.description }}{{ ' · ' if not loop.last }}{% endfor %}
             {% else %}{{ states('sensor.peugeot_407_codes_defaut') }}{% endif %}
             {{- ' · Voyant moteur allumé' if is_state('binary_sensor.peugeot_407_voyant_moteur', 'on') }}
-          vocal: Nouveau défaut moteur détecté.
+          vocal: >-
+            Nouveau défaut moteur détecté : {{ states('sensor.peugeot_407_codes_defaut') }}.
 
   - id: voiture_annonce_limite
     alias: Voiture — annonce de la limitation
@@ -864,7 +909,7 @@ automation:
     actions:
       - action: script.voiture_annonce
         data:
-          message: "Limite {{ trigger.to_state.state | int }}."
+          message: "La limitation de vitesse passe à {{ trigger.to_state.state | int }} km/h (annonce très courte)."
 
   - id: voiture_rappel_entretien
     alias: Voiture — rappels d'entretien
