@@ -839,9 +839,15 @@ automation:
              and trigger.to_state.state | is_number
              and trigger.to_state.state | int > trigger.from_state.state | int }}
     actions:
-      - action: script.voiture_annonce
+      - action: script.voiture_alerte
         data:
-          message: Nouveau défaut moteur détecté.
+          titre: "🔴 Nouveau défaut moteur"
+          message: >-
+            {% set codes = state_attr('sensor.peugeot_407_nombre_de_defauts', 'codes') or [] %}
+            {% if codes %}{% for c in codes %}{{ c.code }} : {{ c.description }}{{ ' · ' if not loop.last }}{% endfor %}
+            {% else %}{{ states('sensor.peugeot_407_codes_defaut') }}{% endif %}
+            {{- ' · Voyant moteur allumé' if is_state('binary_sensor.peugeot_407_voyant_moteur', 'on') }}
+          vocal: Nouveau défaut moteur détecté.
 
   - id: voiture_annonce_limite
     alias: Voiture — annonce de la limitation
