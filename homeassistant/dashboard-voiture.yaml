@@ -26,8 +26,8 @@ views:
             content: '{% set r = states(''sensor.peugeot_407_regime_moteur'') | float(0) if is_state(''binary_sensor.voiture_en_ligne'', ''on'') else 0 %}{{ (r | int) ~ '' tr/min'' if r > 300 else ''Arrêté'' }}'
           - type: template
             icon: mdi:car-wrench
-            icon_color: '{{ ''red'' if is_state(''binary_sensor.peugeot_407_voyant_moteur'', ''on'') or not is_state(''sensor.peugeot_407_codes_defaut'', ''Aucun'') else ''green'' }}'
-            content: '{% set p = states(''sensor.peugeot_407_defauts_en_attente'') | int(0) %}{% if is_state(''binary_sensor.peugeot_407_voyant_moteur'', ''on'') %}Voyant allumé{% elif not is_state(''sensor.peugeot_407_codes_defaut'', ''Aucun'') %}{{ states(''sensor.peugeot_407_codes_defaut'') }}{% else %}Moteur OK{% endif %}{{ '' · '' ~ p ~ '' en attente'' if p > 0 else '''' }}'
+            icon_color: '{{ ''grey'' if not has_value(''sensor.peugeot_407_codes_defaut'') else (''red'' if is_state(''binary_sensor.peugeot_407_voyant_moteur'', ''on'') or not is_state(''sensor.peugeot_407_codes_defaut'', ''Aucun'') else ''green'') }}'
+            content: '{% if not has_value(''sensor.peugeot_407_codes_defaut'') %}Défauts{% else %}{% set p = states(''sensor.peugeot_407_defauts_en_attente'') | int(0) %}{% if is_state(''binary_sensor.peugeot_407_voyant_moteur'', ''on'') %}Voyant allumé{% elif not is_state(''sensor.peugeot_407_codes_defaut'', ''Aucun'') %}{{ states(''sensor.peugeot_407_codes_defaut'') }}{% else %}Moteur OK{% endif %}{{ '' · '' ~ p ~ '' en attente'' if p > 0 else '''' }}{% endif %}'
             tap_action:
               action: navigate
               navigation_path: diagnostic

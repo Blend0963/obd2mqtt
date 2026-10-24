@@ -137,6 +137,14 @@ input_text:
     name: Voiture — correction de la consommation
     icon: mdi:tune-variant
     max: 10
+  # Identifiant du webhook de l'appli OBD (ligne « webhook_id » de peugeot_407.yaml,
+  # ou Réglages → Webhook dans l'appli). Sert à rendre les capteurs « indisponibles »
+  # quand la voiture passe hors ligne. À saisir une fois dans Paramètres → Entrées.
+  voiture_webhook_id:
+    name: Voiture — identifiant du webhook
+    icon: mdi:webhook
+    max: 255
+    mode: password
 
 input_boolean:
   voiture_annonces:
@@ -169,7 +177,7 @@ template:
         device_class: connectivity
         state: >-
           {% set ns = namespace(recent=false) %}
-          {% for e in ['sensor.peugeot_407_tension_batterie', 'sensor.peugeot_407_trajet'] %}
+          {% for e in ['sensor.peugeot_407_tension_batterie', 'sensor.peugeot_407_vitesse', 'sensor.peugeot_407_regime_moteur'] %}
             {% set s = states[e] %}
             {% if s is not none and s.state not in ['unavailable', 'unknown']
                   and (now() - s.last_reported).total_seconds() < 120 %}
@@ -395,6 +403,15 @@ utility_meter:
     cycle: monthly
 
 # ─── Scripts ─────────────────────────────────────────────────────────────────
+# Envoie au webhook de l'appli le message qu'elle envoie elle-même à la déconnexion :
+# tous les capteurs de mesure passent « indisponible » au lieu de rester figés.
+rest_command:
+  voiture_hors_ligne:
+    url: "http://127.0.0.1:8123/api/webhook/{{ states('input_text.voiture_webhook_id') | trim }}"
+    method: post
+    content_type: application/json
+    payload: '{"available": false, "ts": {{ (now().timestamp() * 1000) | int }}, "device": "home-assistant", "pids": {}}'
+
 script:
   # Annonces sur les haut-parleurs de l'autoradio, dites par Igor à sa façon (son prompt,
   # sa mémoire). Le message reçu décrit l'événement ; s'il ne répond pas, il est dit tel quel.
@@ -750,6 +767,28 @@ automation:
                 {{ trajet.vitesse_moy | round(0) | int }} km/h de moyenne
                 {%- if trajet.l100 %} · {{ trajet.l100 }} L/100 · {{ trajet.cout }} €{% endif %}
                 · éco {{ trajet.eco_score }}/100
+
+  # Plus de données depuis 2 min (garage sans réseau, autoradio éteint) :
+  # vitesse, régime, température… passent « indisponible » au lieu de garder la dernière valeur
+  - id: voiture_capteurs_hors_ligne
+    alias: Voiture — capteurs indisponibles hors ligne
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.voiture_en_ligne
+        to: "off"
+      - trigger: homeassistant
+        event: start
+    conditions:
+      - condition: state
+        entity_id: binary_sensor.voiture_en_ligne
+        state: "off"
+      - condition: template
+        value_template: >-
+          {{ states('input_text.voiture_webhook_id') | trim | length > 10
+             and states('sensor.peugeot_407_vitesse') not in ['unavailable', 'unknown'] }}
+    actions:
+      - action: rest_command.voiture_hors_ligne
 
   # Batterie au démarrage (chute de tension pendant que le démarreur tourne)
   - id: voiture_batterie_demarrage
