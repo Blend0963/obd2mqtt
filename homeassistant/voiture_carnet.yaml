@@ -501,6 +501,10 @@ script:
         description: Titre
       message:
         description: Message
+      latitude:
+        description: Position à joindre (facultatif)
+      longitude:
+        description: Position à joindre (facultatif)
     variables:
       agent_ia: conversation.igor
     sequence:
@@ -525,6 +529,8 @@ script:
           - action: script.voiture_envoyer
             data:
               titre: "{{ titre | default('') }}"
+              latitude: "{{ latitude | default('') }}"
+              longitude: "{{ longitude | default('') }}"
               message: >-
                 {% set r = igor.response.speech.plain.speech
                    if igor is defined and igor.response is defined
@@ -534,6 +540,8 @@ script:
           - action: script.voiture_envoyer
             data:
               titre: "{{ titre | default('') }}"
+              latitude: "{{ latitude | default('') }}"
+              longitude: "{{ longitude | default('') }}"
               message: "{{ message }}"
 
   # Envoi sur notify.rappels. Le bot Telegram crée une entité (action notify.send_message) ;
@@ -547,6 +555,17 @@ script:
         description: Titre
       message:
         description: Message
+      latitude:
+        description: Position à joindre (facultatif)
+      longitude:
+        description: Position à joindre (facultatif)
+    variables:
+      position: "{{ latitude | default('') | is_number and longitude | default('') | is_number }}"
+      telegram: "{{ integration_entities('telegram_bot') | length > 0 }}"
+      # Sans bot Telegram, la position part en lien de carte dans le texte
+      texte: >-
+        {{ message }}{% if position and not telegram %}
+        📍 https://maps.google.com/?q={{ latitude }},{{ longitude }}{% endif %}
     sequence:
       - if:
           - condition: template
@@ -557,12 +576,23 @@ script:
               entity_id: notify.rappels
             data:
               title: "{{ titre | default('') }}"
-              message: "{{ message }}"
+              message: "{{ texte }}"
         else:
           - action: notify.rappels
             data:
               title: "{{ titre | default('') }}"
-              message: "{{ message }}"
+              message: "{{ texte }}"
+      # Épingle sur la carte, juste sous le message (bot Telegram)
+      - if:
+          - condition: template
+            value_template: "{{ position and telegram }}"
+        then:
+          - action: telegram_bot.send_location
+            continue_on_error: true
+            data:
+              latitude: "{{ latitude | float }}"
+              longitude: "{{ longitude | float }}"
+              disable_notification: true
 
   voiture_alerte:
     alias: Voiture — alerte (téléphone + autoradio)
@@ -779,6 +809,8 @@ automation:
         then:
           - action: script.voiture_notifier
             data:
+              latitude: "{{ state_attr('device_tracker.peugeot_407', 'latitude') }}"
+              longitude: "{{ state_attr('device_tracker.peugeot_407', 'longitude') }}"
               titre: "🚗 Trajet terminé"
               message: >-
                 {{ trajet.distance_km | round(1) }} km · {{ trajet.duree_min | round(0) | int }} min ·
