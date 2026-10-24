@@ -10,6 +10,7 @@
 # À adapter :
 #   - notify.mobile_app_mycar   → l'autoradio (annonces vocales)
 #   - notify.rappels            → vos notifications (bot Telegram ou groupe de notifications)
+#   - conversation.igor         → l'assistant IA qui rédige les notifications (script voiture_notifier)
 #   - les intervalles d'entretien (section « Entretien », variables en tête de chaque capteur)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -411,12 +412,59 @@ script:
           data:
             tts_text: "{{ message }}"
 
-  # Toutes les notifications passent par ici. Le bot Telegram crée une entité
-  # notify.rappels (action notify.send_message) ; un groupe de notifications ou
-  # l'appli mobile crée une action notify.rappels : les deux marchent.
+  # Toutes les notifications passent par ici. Igor (agent de conversation, intégration
+  # « Igor ») reformule chaque alerte avec son contexte et sa mémoire ; s'il ne répond
+  # pas ou n'est pas installé, le message brut part quand même.
   voiture_notifier:
     alias: Voiture — notification
     mode: queued
+    max: 20
+    fields:
+      titre:
+        description: Titre
+      message:
+        description: Message
+    variables:
+      agent_ia: conversation.igor
+    sequence:
+      - if:
+          - condition: template
+            value_template: "{{ states[agent_ia] is not none }}"
+        then:
+          - action: conversation.process
+            continue_on_error: true
+            data:
+              agent_id: "{{ agent_ia }}"
+              language: fr
+              text: >-
+                Notification automatique de ma voiture (Peugeot 407 2.0 HDi), que je vais
+                recevoir sur Telegram. Réécris-la en français en un message court (3 phrases
+                maximum), en ajoutant ce que tu sais d'utile (historique, gravité, quoi faire).
+                Ne pose pas de question, n'envoie aucune notification toi-même et ne déclenche
+                aucune action : réponds seulement par le texte du message.
+                Titre : {{ titre | default('') }}
+                Message : {{ message }}
+            response_variable: igor
+          - action: script.voiture_envoyer
+            data:
+              titre: "{{ titre | default('') }}"
+              message: >-
+                {% set r = igor.response.speech.plain.speech
+                   if igor is defined and igor.response is defined
+                      and igor.response.response_type != 'error' else '' %}
+                {{ r if r and r | trim | length > 0 else message }}
+        else:
+          - action: script.voiture_envoyer
+            data:
+              titre: "{{ titre | default('') }}"
+              message: "{{ message }}"
+
+  # Envoi sur notify.rappels. Le bot Telegram crée une entité (action notify.send_message) ;
+  # un groupe de notifications ou l'appli mobile crée une action notify.rappels : les deux marchent.
+  voiture_envoyer:
+    alias: Voiture — envoi de notification
+    mode: queued
+    max: 20
     fields:
       titre:
         description: Titre
