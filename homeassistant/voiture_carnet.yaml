@@ -344,15 +344,18 @@ template:
         state: >-
           {{ (states('sensor.peugeot_407_consommation_instantanee') | float(0)
               * states('input_text.voiture_correction_conso') | float(1)) | round(1) }}
+      # L/100 km instantané = L/h (déjà corrigé par les pleins) ÷ km/h × 100, au-dessus de 5 km/h
       - name: Voiture consommation aux 100
         unique_id: voiture_conso_100
         unit_of_measurement: L/100km
         state_class: measurement
         icon: mdi:gas-station
-        availability: "{{ has_value('sensor.peugeot_407_consommation_aux_100') }}"
+        availability: >-
+          {{ states('sensor.voiture_consommation_instantanee') | is_number
+             and states('sensor.peugeot_407_vitesse') | float(0) >= 5 }}
         state: >-
-          {{ (states('sensor.peugeot_407_consommation_aux_100') | float(0)
-              * states('input_text.voiture_correction_conso') | float(1)) | round(1) }}
+          {{ [states('sensor.voiture_consommation_instantanee') | float(0)
+              / states('sensor.peugeot_407_vitesse') | float(1) * 100, 99] | min | round(1) }}
 
       # ── Entretien : modifiez les intervalles ici ──
       - name: Voiture vidange
@@ -420,21 +423,37 @@ template:
           {{ (states('sensor.voiture_carburant_ce_mois') | float(0)
               * states('input_number.voiture_prix_gasoil') | float(0)) | round(2) }}
 
-  # L/100 km pour le graphe de l'onglet Conduite : garde la dernière valeur mesurée en roulant
-  # (le capteur d'origine est indisponible sous 5 km/h, ce qui bloque mini-graph-card)
+  # L/100 km pour le graphe de l'onglet Conduite, calculé ici à partir de deux capteurs qui
+  # fonctionnent toujours moteur tournant : consommation en L/h (déjà corrigée par les pleins)
+  # et vitesse. L/100 km = L/h ÷ km/h × 100, seulement au-dessus de 5 km/h ; à l'arrêt, la
+  # dernière valeur est gardée (à défaut : la moyenne du trajet), donc jamais « inconnu ».
   - triggers:
       - trigger: state
-        entity_id: sensor.voiture_consommation_aux_100
-    conditions:
-      - condition: template
-        value_template: "{{ trigger.to_state is not none and trigger.to_state.state | is_number }}"
+        entity_id:
+          - sensor.voiture_consommation_instantanee
+          - sensor.peugeot_407_vitesse
+      - trigger: homeassistant
+        event: start
     sensor:
       - name: Voiture consommation aux 100 en roulant
         unique_id: voiture_conso_100_roulant
         unit_of_measurement: L/100km
         state_class: measurement
         icon: mdi:gas-station
-        state: "{{ trigger.to_state.state | float }}"
+        state: >-
+          {% set lh = states('sensor.voiture_consommation_instantanee') %}
+          {% set v = states('sensor.peugeot_407_vitesse') | float(0) %}
+          {% set t = state_attr('sensor.peugeot_407_trajet', 'trajet') %}
+          {% set c = states('input_text.voiture_correction_conso') | float(1) %}
+          {% if lh | is_number and v >= 5 %}
+            {{ [lh | float / v * 100, 99] | min | round(1) }}
+          {% elif this.state is defined and this.state | is_number %}
+            {{ this.state }}
+          {% elif t is mapping and t.l100 is number %}
+            {{ (t.l100 * c) | round(1) }}
+          {% else %}
+            0
+          {% endif %}
 
   # « Reprendre le trajet » : allumé une minute quand un nouveau trajet arrive moins de 8 h
   # après la fin du précédent (heure de départ réelle, même si le réseau revient plus tard)
