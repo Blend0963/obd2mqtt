@@ -53,11 +53,17 @@ views:
             conditions:
               - entity: binary_sensor.voiture_moteur_tournant
                 state: 'on'
+              - entity: sensor.voiture_conseil_de_rapport
+                state_not: Aucun
+              - entity: sensor.voiture_conseil_de_rapport
+                state_not: unavailable
+              - entity: sensor.voiture_conseil_de_rapport
+                state_not: unknown
             chip:
               type: template
-              icon: mdi:car-shift-pattern
-              icon_color: blue
-              content: '{% set g = states(''sensor.voiture_rapport_engage'') %}{{ ''Point mort'' if g == ''N'' else (g ~ (''re'' if g == ''1'' else ''e'')) if g in [''1'',''2'',''3'',''4'',''5'',''6''] else ''—'' }}'
+              icon: '{{ ''mdi:arrow-up-bold-circle'' if states(''sensor.voiture_conseil_de_rapport'').startswith(''Passe'') else ''mdi:arrow-down-bold-circle'' }}'
+              icon_color: '{{ ''green'' if states(''sensor.voiture_conseil_de_rapport'').startswith(''Passe'') else ''orange'' }}'
+              content: '{{ states(''sensor.voiture_conseil_de_rapport'') }}'
           - type: template
             icon: mdi:car-wrench
             icon_color: '{{ ''grey'' if not has_value(''sensor.peugeot_407_codes_defaut'') else (''red'' if is_state(''binary_sensor.peugeot_407_voyant_moteur'', ''on'') or not is_state(''sensor.peugeot_407_codes_defaut'', ''Aucun'') else ''green'') }}'

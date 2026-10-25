@@ -284,6 +284,26 @@ template:
             {% set r = states('sensor.peugeot_407_regime_moteur') | float(0) %}
             {{ (v / r * 1000) | round(1) if r >= 600 and v >= 4 else none }}
 
+      # Conseil de passage : monter quand le régime est assez haut et que le rapport suivant
+      # ne fera pas peiner le moteur (≥ 1300 tr/min) ; rétrograder quand il peine (< 1150 tr/min).
+      # Accélération franche (charge ≥ 70 %) : on monte plus tard. « Aucun » = pas de conseil.
+      - name: Voiture conseil de rapport
+        unique_id: voiture_conseil_rapport
+        icon: mdi:car-shift-pattern
+        state: >-
+          {% set g = states('sensor.voiture_rapport_engage') %}
+          {% if g not in ['1', '2', '3', '4', '5', '6'] %}Aucun
+          {% else %}
+            {% set g = g | int %}
+            {% set k = [8.5, 16.4, 26, 36, 45, 55] %}
+            {% set v = states('sensor.peugeot_407_vitesse') | float(0) %}
+            {% set r = states('sensor.peugeot_407_regime_moteur') | float(0) %}
+            {% set haut = 2300 if states('sensor.peugeot_407_charge_moteur') | float(0) < 70 else 3300 %}
+            {% if g < 6 and r >= haut and v / k[g] * 1000 >= 1300 %}Passe la {{ g + 1 }}e
+            {% elif g > 1 and r < 1150 and v / k[g - 2] * 1000 <= 3000 %}Rétrograde en {{ g - 1 }}{{ 're' if g - 1 == 1 else 'e' }}
+            {% else %}Aucun{% endif %}
+          {% endif %}
+
       - name: Voiture kilométrage
         unique_id: voiture_kilometrage
         unit_of_measurement: km
