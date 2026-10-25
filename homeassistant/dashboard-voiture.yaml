@@ -148,6 +148,7 @@ views:
               style: |
                 ha-card {
                   box-shadow: none;
+                  border: none;
                 }
             cards:
               - type: custom:mushroom-template-card
@@ -158,6 +159,15 @@ views:
                 tap_action:
                   action: url
                   url_path: app://deezer.android.app
+                card_mod:
+                  style: |
+                    ha-card {
+                      background: none;
+                      box-shadow: none;
+                      border: none;
+                      --ha-card-box-shadow: none;
+                      --ha-card-background: transparent;
+                    }
               - type: custom:mushroom-chips-card
                 alignment: center
                 card_mod:
@@ -165,6 +175,11 @@ views:
                     ha-card {
                       margin-top: -14px;
                       padding-bottom: 8px;
+                      background: none;
+                      box-shadow: none;
+                      border: none;
+                      --ha-card-box-shadow: none;
+                      --ha-card-background: transparent;
                       --chip-box-shadow: none;
                       --chip-border-width: 0;
                       --chip-background: none;
