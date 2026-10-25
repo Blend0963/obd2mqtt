@@ -11,6 +11,7 @@
 #   - notify.mobile_app_mycar   → l'autoradio (annonces vocales)
 #   - notify.rappels            → vos notifications (bot Telegram ou groupe de notifications)
 #   - conversation.igor         → l'assistant IA qui rédige les notifications (script voiture_notifier)
+#   - tts.igor_text_to_speech + media_player.voiture → la voix d'Igor sur l'autoradio (script voiture_dire)
 #   - les intervalles d'entretien (section « Entretien », variables en tête de chaque capteur)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -164,6 +165,11 @@ input_boolean:
   voiture_notif_fin_trajet:
     name: Voiture — résumé de fin de trajet
     icon: mdi:message-text
+  # Allumé quand le moteur a vraiment refroidi (moins de 50 °C pendant 1 min) : « moteur chaud »
+  # n'est annoncé qu'une fois par montée en température, pas à chaque oscillation autour de 75 °C
+  voiture_moteur_froid_vu:
+    name: Voiture — moteur froid depuis la dernière annonce
+    icon: mdi:snowflake-thermometer
 
 input_select:
   voiture_entretien:
@@ -589,7 +595,9 @@ script:
             data:
               message: "{{ message }}"
 
-  # Lecture par la synthèse vocale de l'autoradio (appli compagnon « MyCar »)
+  # Lecture à voix haute sur l'autoradio, avec la voix d'Igor (son moteur de synthèse Voxtral)
+  # jouée par le lecteur Browser Mod du tableau de bord de l'autoradio. Sans ce lecteur ou sans
+  # la voix d'Igor, repli sur la synthèse vocale d'Android (appli compagnon « MyCar »).
   voiture_dire:
     alias: Voiture — lecture à voix haute
     mode: queued
@@ -597,12 +605,30 @@ script:
     fields:
       message:
         description: Texte à lire
+    variables:
+      voix_ia: tts.igor_text_to_speech
+      lecteur: media_player.voiture
     sequence:
-      - action: notify.mobile_app_mycar
-        data:
-          message: TTS
-          data:
-            tts_text: "{{ message }}"
+      - if:
+          - condition: template
+            value_template: >-
+              {{ states[voix_ia] is not none and states[lecteur] is not none
+                 and states(lecteur) not in ['unavailable', 'unknown'] }}
+        then:
+          - action: tts.speak
+            continue_on_error: true
+            target:
+              entity_id: "{{ voix_ia }}"
+            data:
+              media_player_entity_id: "{{ lecteur }}"
+              message: "{{ message }}"
+              language: fr
+        else:
+          - action: notify.mobile_app_mycar
+            data:
+              message: TTS
+              data:
+                tts_text: "{{ message }}"
 
   # Toutes les notifications passent par ici. Igor (agent de conversation, intégration
   # « Igor ») reformule chaque alerte avec son contexte et sa mémoire ; s'il ne répond
@@ -1070,6 +1096,22 @@ automation:
       - delay:
           minutes: 3
 
+  - id: voiture_moteur_froid_vu
+    alias: Voiture — moteur refroidi
+    mode: single
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.peugeot_407_temperature_liquide_de_refroidissement
+        below: 50
+        for:
+          minutes: 1
+    actions:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.voiture_moteur_froid_vu
+
+  # Une seule annonce par montée en température : il faut que le moteur ait refroidi depuis
+  # (une valeur aberrante d'une seconde ne compte pas, d'où les « for »)
   - id: voiture_moteur_chaud
     alias: Voiture — moteur à température
     mode: single
@@ -1077,10 +1119,16 @@ automation:
       - trigger: numeric_state
         entity_id: sensor.peugeot_407_temperature_liquide_de_refroidissement
         above: 75
+        for:
+          seconds: 30
     conditions:
-      - condition: template
-        value_template: "{{ trigger.from_state is not none and trigger.from_state.state | is_number }}"
+      - condition: state
+        entity_id: input_boolean.voiture_moteur_froid_vu
+        state: "on"
     actions:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.voiture_moteur_froid_vu
       - action: script.voiture_annonce
         data:
           message: Le moteur vient d'atteindre sa température ({{ states('sensor.peugeot_407_temperature_liquide_de_refroidissement') | int(0) }} °C), on peut solliciter le moteur.
