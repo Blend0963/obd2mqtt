@@ -540,44 +540,55 @@ views:
             name: Vitesse et régime
             hours_to_show: 0.25
             points_per_hour: 120
-            height: 100
+            height: 55
             line_width: 2
             smoothing: true
             show:
               fill: fade
               legend: true
+              state: false
+              icon: false
+              name: true
             entities:
               - entity: sensor.peugeot_407_vitesse
                 name: Vitesse
               - entity: sensor.peugeot_407_regime_moteur
                 name: Régime
                 y_axis: secondary
+            font_size_header: 13
           - type: custom:mini-graph-card
             name: Charge et turbo
             hours_to_show: 0.25
             points_per_hour: 120
-            height: 100
+            height: 55
             line_width: 2
             smoothing: true
             show:
               fill: fade
               legend: true
+              state: false
+              icon: false
+              name: true
             entities:
               - entity: sensor.peugeot_407_charge_moteur
                 name: Charge
               - entity: sensor.pression_turbo
                 name: Turbo
                 y_axis: secondary
+            font_size_header: 13
           - type: custom:mini-graph-card
             name: Consommation
             hours_to_show: 0.25
             points_per_hour: 120
-            height: 100
+            height: 55
             line_width: 2
             smoothing: true
             show:
               fill: fade
               legend: true
+              state: false
+              icon: false
+              name: true
             entities:
               - entity: sensor.voiture_consommation_aux_100
                 name: L/100 km
@@ -585,6 +596,7 @@ views:
                 name: L/h
                 y_axis: secondary
                 show_fill: false
+            font_size_header: 13
       - type: grid
         cards:
           - type: heading
