@@ -546,13 +546,13 @@ views:
             name: Vitesse et régime
             hours_to_show: 0.25
             points_per_hour: 120
-            height: 55
+            height: 45
             line_width: 2
             smoothing: true
             show:
               fill: fade
               legend: true
-              state: false
+              state: true
               icon: false
               name: true
             entities:
@@ -562,17 +562,18 @@ views:
                 name: Régime
                 y_axis: secondary
             font_size_header: 13
+            font_size: 60
           - type: custom:mini-graph-card
             name: Charge et turbo
             hours_to_show: 0.25
             points_per_hour: 120
-            height: 55
+            height: 45
             line_width: 2
             smoothing: true
             show:
               fill: fade
               legend: true
-              state: false
+              state: true
               icon: false
               name: true
             entities:
@@ -582,23 +583,25 @@ views:
                 name: Turbo
                 y_axis: secondary
             font_size_header: 13
+            font_size: 60
           - type: custom:mini-graph-card
-            name: Consommation (L/h)
+            name: Consommation (L/100 km)
             hours_to_show: 0.25
             points_per_hour: 120
-            height: 55
+            height: 45
             line_width: 2
             smoothing: true
             show:
               fill: fade
               legend: false
-              state: false
+              state: true
               icon: false
               name: true
             entities:
-              - entity: sensor.voiture_consommation_instantanee
-                name: L/h
+              - entity: sensor.voiture_consommation_aux_100_en_roulant
+                name: L/100 km
             font_size_header: 13
+            font_size: 60
       - type: grid
         cards:
           - type: heading

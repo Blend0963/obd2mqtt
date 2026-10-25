@@ -420,6 +420,22 @@ template:
           {{ (states('sensor.voiture_carburant_ce_mois') | float(0)
               * states('input_number.voiture_prix_gasoil') | float(0)) | round(2) }}
 
+  # L/100 km pour le graphe de l'onglet Conduite : garde la dernière valeur mesurée en roulant
+  # (le capteur d'origine est indisponible sous 5 km/h, ce qui bloque mini-graph-card)
+  - triggers:
+      - trigger: state
+        entity_id: sensor.voiture_consommation_aux_100
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.to_state is not none and trigger.to_state.state | is_number }}"
+    sensor:
+      - name: Voiture consommation aux 100 en roulant
+        unique_id: voiture_conso_100_roulant
+        unit_of_measurement: L/100km
+        state_class: measurement
+        icon: mdi:gas-station
+        state: "{{ trigger.to_state.state | float }}"
+
   # « Reprendre le trajet » : allumé une minute quand un nouveau trajet arrive moins de 8 h
   # après la fin du précédent (heure de départ réelle, même si le réseau revient plus tard)
   - triggers:
