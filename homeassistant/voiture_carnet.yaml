@@ -196,6 +196,13 @@ template:
             {% endif %}
           {% endfor %}
           {{ ns.recent }}
+      # Moteur qui tourne et données fraîches (pastilles de l'Aperçu : « Arrêté » ou le rapport)
+      - name: Voiture moteur tournant
+        unique_id: voiture_moteur_tournant
+        icon: mdi:engine
+        state: >-
+          {{ is_state('binary_sensor.voiture_en_ligne', 'on')
+             and states('sensor.peugeot_407_regime_moteur') | float(0) >= 300 }}
       - name: Voiture trajet en cours
         unique_id: voiture_trajet_en_cours
         icon: mdi:map-marker-path
@@ -253,6 +260,29 @@ template:
         icon: mdi:engine
         availability: "{{ states('sensor.peugeot_407_regime_moteur') | float(0) >= 300 }}"
         state: "{{ states('sensor.peugeot_407_regime_moteur') | float(0) }}"
+
+      # Rapport engagé, déduit de la vitesse et du régime (km/h pour 1000 tr/min).
+      # Boîte 6 vitesses : seuils au milieu (géométrique) des rapports estimés
+      # 8,5 / 16,4 / 26 / 36 / 45 / 55 km/h pour 1000 tr/min. L'attribut « kmh_1000 »
+      # permet de les recaler : noter sa valeur en roulant sur chaque rapport.
+      - name: Voiture rapport engagé
+        unique_id: voiture_rapport_engage
+        icon: mdi:car-shift-pattern
+        availability: "{{ is_state('binary_sensor.voiture_moteur_tournant', 'on') }}"
+        state: >-
+          {% set v = states('sensor.peugeot_407_vitesse') | float(0) %}
+          {% set r = states('sensor.peugeot_407_regime_moteur') | float(0) %}
+          {% if v < 4 or r < 600 %}N
+          {% else %}
+            {% set k = v / r * 1000 %}
+            {% set seuils = [11.8, 20.6, 30.6, 40.2, 49.6] %}
+            {{ (seuils | select('lt', k) | list | length) + 1 }}
+          {% endif %}
+        attributes:
+          kmh_1000: >-
+            {% set v = states('sensor.peugeot_407_vitesse') | float(0) %}
+            {% set r = states('sensor.peugeot_407_regime_moteur') | float(0) %}
+            {{ (v / r * 1000) | round(1) if r >= 600 and v >= 4 else none }}
 
       - name: Voiture kilométrage
         unique_id: voiture_kilometrage

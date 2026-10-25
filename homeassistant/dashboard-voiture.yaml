@@ -42,17 +42,22 @@ views:
         chips:
           - type: conditional
             conditions:
-              - entity: binary_sensor.voiture_en_ligne
-                state: 'off'
+              - entity: binary_sensor.voiture_moteur_tournant
+                state_not: 'on'
             chip:
               type: template
-              icon: mdi:access-point-off
+              icon: '{{ ''mdi:engine-off'' if is_state(''binary_sensor.voiture_en_ligne'', ''on'') else ''mdi:access-point-off'' }}'
               icon_color: grey
-              content: Hors ligne
-          - type: template
-            icon: mdi:engine
-            icon_color: '{{ ''green'' if is_state(''binary_sensor.voiture_en_ligne'', ''on'') and states(''sensor.peugeot_407_regime_moteur'') | float(0) > 300 else ''grey'' }}'
-            content: '{% set r = states(''sensor.peugeot_407_regime_moteur'') | float(0) if is_state(''binary_sensor.voiture_en_ligne'', ''on'') else 0 %}{{ (r | int) ~ '' tr/min'' if r > 300 else ''Arrêté'' }}'
+              content: '{{ ''Arrêté'' if is_state(''binary_sensor.voiture_en_ligne'', ''on'') else ''Hors ligne'' }}'
+          - type: conditional
+            conditions:
+              - entity: binary_sensor.voiture_moteur_tournant
+                state: 'on'
+            chip:
+              type: template
+              icon: mdi:car-shift-pattern
+              icon_color: blue
+              content: '{% set g = states(''sensor.voiture_rapport_engage'') %}{{ ''Point mort'' if g == ''N'' else (g ~ (''re'' if g == ''1'' else ''e'')) if g in [''1'',''2'',''3'',''4'',''5'',''6''] else ''—'' }}'
           - type: template
             icon: mdi:car-wrench
             icon_color: '{{ ''grey'' if not has_value(''sensor.peugeot_407_codes_defaut'') else (''red'' if is_state(''binary_sensor.peugeot_407_voyant_moteur'', ''on'') or not is_state(''sensor.peugeot_407_codes_defaut'', ''Aucun'') else ''green'') }}'
@@ -60,24 +65,6 @@ views:
             tap_action:
               action: navigate
               navigation_path: diagnostic
-          - type: conditional
-            conditions:
-              - entity: binary_sensor.voiture_en_ligne
-                state: 'on'
-            chip:
-              type: template
-              icon: mdi:thermometer
-              icon_color: '{% set t = states(''sensor.peugeot_407_temperature_liquide_de_refroidissement'') | float(0) %}{{ ''blue'' if t < 60 else (''green'' if t < 100 else (''orange'' if t < 110 else ''red'')) }}'
-              content: '{% set t = states(''sensor.peugeot_407_temperature_liquide_de_refroidissement'') | float(0) %}{{ t | int }} °C{{ '' · Surchauffe !'' if t >= 105 else '''' }}'
-          - type: conditional
-            conditions:
-              - entity: binary_sensor.voiture_en_ligne
-                state: 'on'
-            chip:
-              type: template
-              icon: mdi:car-battery
-              icon_color: '{% set v = states(''sensor.peugeot_407_tension_batterie'') | float(0) %}{{ ''green'' if 12.4 <= v <= 14.8 else (''orange'' if v >= 11.8 else ''red'') }}'
-              content: '{% set v = states(''sensor.peugeot_407_tension_batterie'') | float(0) %}{{ v }} V{{ '' · faible'' if v < 12.2 else '''' }}'
           - type: conditional
             conditions:
               - entity: binary_sensor.voiture_trajet_en_cours
