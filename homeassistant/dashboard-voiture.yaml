@@ -583,7 +583,7 @@ views:
                 y_axis: secondary
             font_size_header: 13
           - type: custom:mini-graph-card
-            name: Consommation
+            name: Consommation (L/h)
             hours_to_show: 0.25
             points_per_hour: 120
             height: 55
@@ -591,17 +591,13 @@ views:
             smoothing: true
             show:
               fill: fade
-              legend: true
+              legend: false
               state: false
               icon: false
               name: true
             entities:
-              - entity: sensor.voiture_consommation_aux_100
-                name: L/100 km
               - entity: sensor.voiture_consommation_instantanee
                 name: L/h
-                y_axis: secondary
-                show_fill: false
             font_size_header: 13
       - type: grid
         cards:
