@@ -45,7 +45,9 @@ data class AppConfig(
     val engineRunningOnly: Boolean = false,
     /** Optional HA long-lived token: lets the app read the "clear faults" button state from HA. */
     val haToken: String = "",
-    val btTransport: BtTransport = BtTransport.AUTO
+    val btTransport: BtTransport = BtTransport.AUTO,
+    /** Read a USB GPS receiver and give its position to Android (mock location). */
+    val usbGps: Boolean = false
 ) {
     val mqttClientId: String get() = "obd2_android_${btDeviceMac.replace(":", "")}"
 }
@@ -89,6 +91,7 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
         val LAST_OBD_PROTOCOL = stringPreferencesKey("lastObdProtocol")
         val ENGINE_RUNNING_ONLY = booleanPreferencesKey("engineRunningOnly")
         val HA_TOKEN = stringPreferencesKey("haToken")
+        val USB_GPS = booleanPreferencesKey("usbGps")
 
         // Default fast PIDs (1 s) — live driving data; only those the car supports are polled.
         // RPM, Speed, Load, Throttle, Coolant, MAP, MAF, battery voltage (AT RV)
@@ -143,6 +146,8 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
     /** Off by default: car units power off with the ignition, so the car is never queried while parked. */
     val engineRunningOnly: Flow<Boolean> = dataStore.data.map { it[ENGINE_RUNNING_ONLY] ?: false }
     val haToken: Flow<String> = dataStore.data.map { it[HA_TOKEN] ?: "" }
+    /** Off by default: only for a car unit with a GPS receiver on its USB port. */
+    val usbGps: Flow<Boolean> = dataStore.data.map { it[USB_GPS] ?: false }
     val lastObdProtocol: Flow<ObdProtocol?> = dataStore.data.map { prefs ->
         prefs[LAST_OBD_PROTOCOL]?.let { runCatching { ObdProtocol.valueOf(it) }.getOrNull() }
     }
@@ -179,7 +184,8 @@ class AppSettings(private val dataStore: DataStore<Preferences>) {
         obdProtocol = obdProtocol.first(),
         engineRunningOnly = engineRunningOnly.first(),
         haToken = haToken.first(),
-        btTransport = btTransport.first()
+        btTransport = btTransport.first(),
+        usbGps = usbGps.first()
     )
 
     val cachedPids: Flow<Set<Int>> = dataStore.data.map { prefs ->

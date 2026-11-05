@@ -39,6 +39,7 @@ fun MainScreen(
     val cycleMs by viewModel.cycleMs.collectAsState()
     val trip by viewModel.currentTrip.collectAsState()
     val statusText by viewModel.statusText.collectAsState()
+    val usbGpsStatus by com.frodrigues.obdmqtt.gps.UsbGps.status.collectAsState()
     val diagnostics by viewModel.diagnostics.collectAsState()
     val engineOffVoltage by viewModel.engineOffVoltage.collectAsState()
 
@@ -129,6 +130,15 @@ fun MainScreen(
                         )
                         TextButton(onClick = onNavigateToLog) { Text("Journal") }
                     }
+                }
+
+                // ── The USB GPS receiver, when enabled ──
+                if (usbGpsStatus.isNotBlank() && serviceStatus != ServiceStatus.IDLE) {
+                    Text(
+                        text = usbGpsStatus,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
 
                 // ── Engine off: the ECU is left alone until the alternator charges ──

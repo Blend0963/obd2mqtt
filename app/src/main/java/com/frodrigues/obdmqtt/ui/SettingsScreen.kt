@@ -60,6 +60,8 @@ fun SettingsScreen(
     val btName by settings.btDeviceName.collectAsState(initial = "")
     val autoStart by settings.autoStart.collectAsState(initial = true)
     val engineRunningOnly by settings.engineRunningOnly.collectAsState(initial = false)
+    val usbGps by settings.usbGps.collectAsState(initial = false)
+    val usbGpsStatus by com.frodrigues.obdmqtt.gps.UsbGps.status.collectAsState()
     val publishMode by settings.publishMode.collectAsState(initial = PublishMode.WEBHOOK)
 
     // Local text field state — avoids cursor-jump bug from DataStore re-emission
@@ -733,6 +735,33 @@ fun SettingsScreen(
                     ) {
                         scope.launch { settings.update { this[AppSettings.ENGINE_RUNNING_ONLY] = !engineRunningOnly } }
                     }
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                ListItem(
+                    headlineContent = { Text("Récepteur GPS USB") },
+                    supportingContent = {
+                        Text(
+                            text = "Lit le GPS branché en USB et le donne à Android comme son GPS (remplace " +
+                                   "UsbGps4Droid), démarré avec la collecte. Dans les options pour les " +
+                                   "développeurs, choisir cette appli comme « position fictive ». " +
+                                   "Au branchement, cocher « toujours » pour cette appli." +
+                                   (if (usbGps && usbGpsStatus.isNotBlank()) "\n$usbGpsStatus" else ""),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = usbGps,
+                            onCheckedChange = { enabled ->
+                                // The running service follows it at once
+                                scope.launch { settings.update { this[AppSettings.USB_GPS] = enabled } }
+                            }
+                        )
+                    },
+                    colors = ListItemDefaults.colors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                    )
                 )
             }
 

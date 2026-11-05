@@ -20,6 +20,7 @@ import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.frodrigues.obdmqtt.MainActivity
 import com.frodrigues.obdmqtt.bluetooth.BluetoothTransportFactory
+import com.frodrigues.obdmqtt.gps.UsbGps
 import android.util.Log
 import com.frodrigues.obdmqtt.obd.ClearResult
 import com.frodrigues.obdmqtt.obd.DiagnosticReport
@@ -46,6 +47,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 enum class ServiceStatus { IDLE, CONNECTING, CONNECTED, RECONNECTING, WAITING_ENGINE }
 
@@ -78,6 +80,8 @@ class OBDCollectorService : LifecycleService() {
     @Volatile private var ecuConnected = false
     private var lastClear: ClearResult? = null
     private val clearButtonWatcher = ClearButtonWatcher()
+    /** The USB GPS receiver, when enabled in Settings: runs as long as the service. */
+    private var usbGps: UsbGps? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -110,6 +114,13 @@ class OBDCollectorService : LifecycleService() {
             },
             ContextCompat.RECEIVER_EXPORTED  // system / Bluetooth broadcasts
         )
+        // The USB GPS follows its setting while the service runs (switched on or off at once)
+        lifecycleScope.launch {
+            settings.usbGps.distinctUntilChanged().collect { on ->
+                if (on) usbGps = (usbGps ?: UsbGps(applicationContext, lifecycleScope)).also { it.start() }
+                else { usbGps?.stop(); usbGps = null }
+            }
+        }
     }
 
     override fun onBind(intent: Intent): IBinder {
@@ -448,6 +459,8 @@ class OBDCollectorService : LifecycleService() {
             clearPending.value = false
         }
         job.cancel()
+        usbGps?.stop()
+        usbGps = null
         releaseWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -460,6 +473,7 @@ class OBDCollectorService : LifecycleService() {
 
     override fun onDestroy() {
         runCatching { unregisterReceiver(deviceWakeReceiver) }
+        usbGps?.stop()
         releaseWakeLock()
         super.onDestroy()
     }
