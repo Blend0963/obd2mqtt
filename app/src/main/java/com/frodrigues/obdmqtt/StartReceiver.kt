@@ -33,6 +33,10 @@ class StartReceiver : BroadcastReceiver() {
                     OBDCollectorService.stoppedByUser = false
                     AutoStart.startCollection(context, "commande externe")
                 }
+                // The GPS receiver plugged in (StartActivity's USB filter): collection, and so the GPS, starts
+                android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
+                    if (!OBDCollectorService.stoppedByUser) AutoStart.startCollection(context, "récepteur GPS USB branché")
+                }
                 ACTION_STOP -> {
                     if (OBDCollectorService.status.value == ServiceStatus.IDLE) return
                     DebugLog.add("Arrêt demandé par commande externe")

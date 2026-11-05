@@ -108,6 +108,17 @@ Le bouton **2 bis. Copier le tableau de bord avancé (HACS)** produit le même t
    speed_limit_entity: sensor.vitesse_limite   # facultatif
    ```
 
+## Récepteur GPS USB (remplace UsbGps4Droid)
+
+L'application lit aussi un récepteur GPS branché sur un port USB de l'autoradio et donne sa position à Android comme si c'était son GPS. Home Assistant (le `device_tracker` de l'autoradio), Waze et la carte GPS l'utilisent alors. Elle démarre et s'arrête avec la collecte OBD, et revient seule quand on rebranche le récepteur. Il n'y a plus d'appli à part, ni de bouton « Start ».
+
+1. **Réglages → Récepteur GPS USB** : activer.
+2. **Options pour les développeurs → Sélectionner une application de position fictive** : choisir cette application à la place d'UsbGps4Droid. Pour afficher les options pour les développeurs : Paramètres → À propos → toucher sept fois « Numéro de build ».
+3. Au branchement du récepteur (ou à la première activation), Android demande l'accès USB : cocher **« Toujours utiliser cette application »**. L'accès est alors gardé, et brancher le récepteur lance la collecte sans rien afficher.
+4. Désinstaller UsbGps4Droid, ou au moins le désactiver, pour qu'une seule appli fournisse la position.
+
+Puces prises en charge : u-blox et tous les récepteurs « CDC » (la majorité des souris GPS USB), Prolific PL2303, Silicon Labs CP210x, WCH CH340/CH341. La vitesse de la liaison est trouvée seule : 4800 bauds, puis 9600, 38400, 115200, 19200, 57600. L'écran principal affiche l'état : nombre de satellites et précision.
+
 ## Carnet de bord : trajets, entretien, consommation, alertes
 
 Depuis la v1.0.10, l'application suit chaque **trajet** (démarrage → arrêt du moteur) : distance, durée, vitesses, ralenti, carburant estimé, score d'éco-conduite (accélérations et freinages brusques, surrégimes, moteur froid sollicité), chronos 0-100 et 80-120 km/h, et la **tension de la batterie au démarrage** (chute pendant que le démarreur tourne : moins de 10 V = batterie fatiguée). Le trajet part dans le webhook (`"trip"`) ; Home Assistant l'enregistre quand l'appli le déclare fini ou quand il ne bouge plus depuis 3 minutes (autoradio éteint avec le contact).

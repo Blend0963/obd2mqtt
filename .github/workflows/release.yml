@@ -64,6 +64,9 @@ jobs:
         if: env.HAS_SIGNING == 'true'
         run: echo "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" | base64 -d > release.jks
 
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest
+
       - name: Build Debug APK
         run: ./gradlew assembleDebug
 

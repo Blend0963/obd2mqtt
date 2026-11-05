@@ -21,6 +21,11 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- USB GPS receiver: its position given to Android (choose this app as mock location app) -->
+    <uses-permission
+        android:name="android.permission.ACCESS_MOCK_LOCATION"
+        tools:ignore="MockLocation,ProtectedPermissions" />
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
 
     <application
         android:allowBackup="true"
@@ -80,6 +85,14 @@
                 <action android:name="com.frodrigues.obdmqtt.action.STOP" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
+            <!-- A USB GPS receiver plugged in: Android offers this app (tick « always »:
+                 the access is then granted for good) and collection starts, unseen -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/usb_gps_devices" />
         </activity>
 
         <!-- Silent start/stop for Home Assistant, Tasker, MacroDroid (see StartReceiver) -->
