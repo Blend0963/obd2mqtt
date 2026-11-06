@@ -123,12 +123,25 @@ class UsbGps(private val context: Context, private val scope: CoroutineScope) {
             var baudIndex = 0
             var acc = NmeaAccumulator()
             var since = System.currentTimeMillis()
+            var lastFixAt = 0L
+            var lastSearch = 0L
+            val searchSince = System.currentTimeMillis()
+            var publishFailed = false
             val split = LineSplitter { line ->
                 acc.feed(line)?.let { fix ->
-                    if (!mock.active) mock.start()
-                    mock.publish(fix)
+                    lastFixAt = System.currentTimeMillis()
                     lastFix.value = fix
                     status.value = "GPS USB : ${fix.satellites ?: "?"} satellites · ±${fix.accuracyM.toInt()} m"
+                    // Giving it to Android must never stop the reading.
+                    try {
+                        if (!mock.active) mock.start()
+                        mock.publish(fix)
+                        publishFailed = false
+                    } catch (e: Exception) {
+                        if (!publishFailed) DebugLog.add("GPS USB : position non transmise à Android (${e.javaClass.simpleName} : ${e.message})")
+                        publishFailed = true
+                        status.value = "GPS USB : position reçue, mais pas transmise à Android"
+                    }
                 }
             }
             val buf = ByteArray(512)
@@ -137,6 +150,18 @@ class UsbGps(private val context: Context, private val scope: CoroutineScope) {
                 val n = port.read(buf, 1000)
                 if (n < 0 && findDevice() == null) break
                 if (n > 0) split.feed(buf, n)
+                // Still no position: say what the receiver sees, every 2 s.
+                val now = System.currentTimeMillis()
+                if (acc.sentences > 0 && now - lastFixAt > 5_000 && now - lastSearch > 2_000) {
+                    lastSearch = now
+                    val mins = (now - (if (lastFixAt > 0) lastFixAt else searchSince)) / 60_000
+                    val seen = acc.inView
+                    status.value = "GPS USB : recherche du signal" + when {
+                        seen == null -> ""
+                        seen == 0 && mins >= 1 -> " · aucun satellite en vue (le récepteur voit-il le ciel ?)"
+                        else -> " · $seen satellite${if (seen > 1) "s" else ""} en vue" + (acc.used?.let { " ($it utilisé${if (it > 1) "s" else ""})" } ?: "")
+                    } + (if (mins >= 1) " · depuis $mins min" else "")
+                }
                 // No sentence at this speed after a while: try the next one
                 if (acc.sentences == 0 && System.currentTimeMillis() - since > BAUD_TRY_MS) {
                     baudIndex = (baudIndex + 1) % bauds.size

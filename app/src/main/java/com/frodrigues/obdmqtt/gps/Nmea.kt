@@ -90,6 +90,16 @@ class NmeaAccumulator {
     var sentences = 0
         private set
 
+    // Satellites in view, per constellation (GPGSV, GLGSV, GAGSV, BDGSV…): what
+    // the receiver sees while it looks for a fix.
+    private val inViewBy = HashMap<String, Int>()
+
+    /** Satellites in view (all constellations), null until a GSV sentence came. */
+    val inView: Int? get() = if (inViewBy.isEmpty()) null else inViewBy.values.sum()
+
+    /** Satellites used for the position (GGA), null until a GGA sentence came. */
+    val used: Int? get() = satellites
+
     fun feed(line: String): GpsFix? {
         val f = Nmea.fields(line) ?: return null
         sentences++
@@ -101,6 +111,7 @@ class NmeaAccumulator {
                 hdop = f[8].toDoubleOrNull()
                 altitude = if (quality > 0) f[9].toDoubleOrNull() else null
             }
+            "GSV" -> if (f.size > 3) f[3].toIntOrNull()?.let { inViewBy[f[0].dropLast(3)] = it }
             "RMC" -> if (f.size > 9 && f[2] == "A") {
                 val lat = Nmea.coordinate(f[3], f[4]) ?: return null
                 val lon = Nmea.coordinate(f[5], f[6]) ?: return null

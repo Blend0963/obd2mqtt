@@ -46,6 +46,18 @@ class NmeaTest {
         assertEquals(1, acc.sentences)
     }
 
+    @Test fun satellitesInViewWhileSearching() {
+        val acc = NmeaAccumulator()
+        assertNull(acc.inView)
+        acc.feed(withChecksum("GPGSV,2,1,07,02,45,120,30,05,30,060,25,13,10,300,,15,70,200,35"))
+        acc.feed(withChecksum("GPGSV,2,2,07,18,12,040,,24,55,250,28,29,20,330,"))
+        acc.feed(withChecksum("GLGSV,1,1,03,65,40,100,22,66,15,180,,72,60,270,30"))
+        acc.feed(withChecksum("GNGGA,092750.000,,,,,0,00,99.9,,M,,M,,"))
+        assertEquals(10, acc.inView)
+        assertEquals(0, acc.used)
+        assertNull(acc.feed(withChecksum("GNRMC,092750.000,V,,,,,,,061126,,,N")))
+    }
+
     @Test fun standingStillHasNoBearing() {
         val fix = NmeaAccumulator().feed(withChecksum("GPRMC,092750,A,4851.000,N,00221.000,E,0.3,211.0,061126,,"))!!
         assertNull(fix.bearingDeg)
