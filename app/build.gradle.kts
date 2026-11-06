@@ -113,6 +113,8 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.hivemq.mqtt.client)
     implementation(libs.kotlinx.coroutines.android)
+    // The USB GPS also given to Google's fused location (Home Assistant's app reads that one)
+    implementation(libs.play.services.location)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
