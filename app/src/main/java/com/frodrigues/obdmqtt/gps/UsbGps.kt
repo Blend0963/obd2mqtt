@@ -34,11 +34,23 @@ class UsbGps(private val context: Context, private val scope: CoroutineScope) {
     private val mock = MockLocation(context)
     private var job: Job? = null
     private var receiverOn = false
+    // Android's permission window is shown at most once per plugging.
+    @Volatile private var asked = false
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, intent: Intent) {
             when (intent.action) {
-                UsbManager.ACTION_USB_DEVICE_ATTACHED, ACTION_PERMISSION -> restart()
+                // Plugged in again: Android may ask once more (never in a loop).
+                UsbManager.ACTION_USB_DEVICE_ATTACHED -> { asked = false; restart() }
+                ACTION_PERMISSION -> {
+                    if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) restart()
+                    else {
+                        // Refused or the window closed: not asked again until the
+                        // receiver is plugged in again or collection restarts.
+                        status.value = "Accès au récepteur GPS refusé : rebranchez-le pour autoriser"
+                        DebugLog.add("GPS USB : accès refusé")
+                    }
+                }
                 UsbManager.ACTION_USB_DEVICE_DETACHED -> {
                     status.value = "Récepteur GPS débranché"
                     job?.cancel()
@@ -56,6 +68,7 @@ class UsbGps(private val context: Context, private val scope: CoroutineScope) {
             }, ContextCompat.RECEIVER_EXPORTED)  // USB broadcasts come from the system
             receiverOn = true
         }
+        asked = false
         restart()
     }
 
@@ -80,7 +93,20 @@ class UsbGps(private val context: Context, private val scope: CoroutineScope) {
         val device = findDevice()
         if (device == null) { status.value = "Aucun récepteur GPS USB branché"; running.value = false; return }
         if (!usb.hasPermission(device)) {
-            status.value = "Autoriser l'accès au récepteur GPS (fenêtre Android)"
+            // The app chosen « always » for this receiver gets the access from
+            // Android itself when it is plugged in or at start-up (StartActivity
+            // opened for it): wait for that before asking with a window.
+            status.value = "Récepteur GPS : en attente de l'accès…"
+            val until = System.currentTimeMillis() + GRANT_WAIT_MS
+            while (System.currentTimeMillis() < until && !usb.hasPermission(device)) {
+                delay(500)
+                if (findDevice() == null) { status.value = "Aucun récepteur GPS USB branché"; return }
+            }
+        }
+        if (!usb.hasPermission(device)) {
+            if (asked) { status.value = "Accès au récepteur GPS refusé : rebranchez-le pour autoriser"; return }
+            asked = true
+            status.value = "Autoriser l'accès au récepteur GPS (fenêtre Android, une seule fois)"
             val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
             val pi = PendingIntent.getBroadcast(context, 0, Intent(ACTION_PERMISSION).setPackage(context.packageName), flags)
             usb.requestPermission(device, pi)  // the answer comes back as ACTION_PERMISSION → restart
@@ -132,6 +158,7 @@ class UsbGps(private val context: Context, private val scope: CoroutineScope) {
 
     companion object {
         const val ACTION_PERMISSION = "com.frodrigues.obdmqtt.USB_GPS_PERMISSION"
+        private const val GRANT_WAIT_MS = 15_000L
         private val BAUDS = listOf(4800, 9600, 38400, 115200, 19200, 57600)
         private const val BAUD_TRY_MS = 4_000L
 
