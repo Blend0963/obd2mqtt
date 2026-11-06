@@ -63,7 +63,7 @@ ELM327 ──BT──► BluetoothTransport (Classic/BLE)
 **USB GPS** (`gps/`) — Optional (`usbGps` setting, off by default), replaces UsbGps4Droid on car units with a GPS receiver on USB:
 - `UsbGps` is owned by `OBDCollectorService` and follows the setting while the service runs. It finds the receiver (`UsbSerialPort.looksLikeSerial`), asks for USB permission (`ACTION_PERMISSION` broadcast) and reads lines.
 - Baud rate: the last working one, else 4800 → 9600 → 38400 → 115200 → 19200 → 57600, 4 s each.
-- Positions are given to Android as the GPS and network providers and to Google's fused location in mock mode (`MockLocation`, needs the app chosen as mock location app); every 10 s it checks they are still its own and puts them back (an app started earlier, such as Home Assistant's, reads the fused location).
+- Positions are given to Android as the GPS provider (test provider, as UsbGps4Droid; the network provider is left alone so apps keep a rough position during a cold start) and, while fixes come, to Google's fused location in mock mode, released after 30 s without a fix (`MockLocation`, needs the app chosen as mock location app); every 10 s it checks the GPS provider is still its own and puts it back. While searching, the status shows the satellites in view and used.
 - `UsbSerialPort` is a minimal read-only driver: CDC set-line-coding (u-blox, PL2303, generic CDC), CP210x vendor requests, CH34x init/divisor (`ch34xDivisor`, as Linux' ch341).
 - `Nmea` / `NmeaAccumulator` / `LineSplitter` are pure and unit-tested: RMC gives the fix, GGA adds altitude, satellites and HDOP; bad checksums are dropped.
 - `StartActivity` also handles `USB_DEVICE_ATTACHED` (`res/xml/usb_gps_devices.xml`), so plugging the receiver starts collection unseen.

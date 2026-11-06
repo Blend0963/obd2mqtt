@@ -154,6 +154,7 @@ class UsbGps(private val context: Context, private val scope: CoroutineScope) {
                 val now = System.currentTimeMillis()
                 if (acc.sentences > 0 && now - lastFixAt > 5_000 && now - lastSearch > 2_000) {
                     lastSearch = now
+                    mock.idle()
                     val mins = (now - (if (lastFixAt > 0) lastFixAt else searchSince)) / 60_000
                     val seen = acc.inView
                     status.value = "GPS USB : recherche du signal" + when {
