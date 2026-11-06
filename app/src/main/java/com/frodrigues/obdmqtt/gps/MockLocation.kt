@@ -19,28 +19,34 @@ import com.google.android.gms.location.LocationServices
  * application de position fictive »: until then [start] says so and nothing is sent.
  *
  * Two ways in, both kept up while the receiver gives fixes:
- * - Android's own providers (GPS and network), as test providers;
- * - Google's fused location (Play services), in mock mode: Home Assistant's
- *   companion app reads its position there, and an app started before this one
- *   would otherwise keep the fused location's own (network) idea of where it is.
+ * - Android's GPS provider, as a test provider (as UsbGps4Droid did). The
+ *   network provider (Wi-Fi, cells) is left alone: while the receiver looks
+ *   for its first fix (minutes after a power cut), apps still get a rough position;
+ * - Google's fused location (Play services), in mock mode, only while fixes
+ *   come: Home Assistant's companion app reads its position there. Without a
+ *   fix for [FUSED_IDLE_MS], the fused location goes back to its own sources.
  * [ensure] checks every few seconds that both are still ours and puts them back
  * if not (another app, a provider reset, an app started earlier).
  */
 class MockLocation(context: Context) {
 
     private val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-    private val providers = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+    private val providers = listOf(LocationManager.GPS_PROVIDER)
     private val fused: FusedLocationProviderClient? =
         runCatching { LocationServices.getFusedLocationProviderClient(context) }.getOrNull()
     private var fusedOn = false
     private var lastEnsure = 0L
     private var lastFusedMode = 0L
+    private var lastPublish = 0L
+    @Volatile private var fusedPending = false
     var active = false
         private set
 
     /** Null when it works, else why not (in French, for the status line). */
     fun start(): String? {
         if (active) return null
+        // Versions up to 1.0.15 also replaced the network provider: give it back.
+        runCatching { lm.removeTestProvider(LocationManager.NETWORK_PROVIDER) }
         return try {
             for (p in providers) {
                 runCatching { lm.removeTestProvider(p) }
@@ -55,7 +61,6 @@ class MockLocation(context: Context) {
                 lm.setTestProviderEnabled(p, true)
             }
             active = true
-            fusedMode(true)
             null
         } catch (e: SecurityException) {
             "Choisir cette appli comme « position fictive » dans les options pour les développeurs"
@@ -68,12 +73,14 @@ class MockLocation(context: Context) {
     private fun fusedMode(on: Boolean) {
         val f = fused ?: return
         try {
+            fusedPending = true
             f.setMockMode(on)
-                .addOnSuccessListener { fusedOn = on }
-                .addOnFailureListener { fusedOn = false; if (on) DebugLog.add("GPS USB : position Google refusée (${it.message})") }
+                .addOnSuccessListener { fusedOn = on; fusedPending = false }
+                .addOnFailureListener { fusedOn = false; fusedPending = false; if (on) DebugLog.add("GPS USB : position Google refusée (${it.message})") }
             lastFusedMode = SystemClock.elapsedRealtime()
         } catch (e: Exception) {  // no Play services, no permission: Android's providers only
             fusedOn = false
+            fusedPending = false
         }
     }
 
@@ -82,6 +89,9 @@ class MockLocation(context: Context) {
         if (!active) return
         ensure()
         for (p in providers) runCatching { lm.setTestProviderLocation(p, location(p, fix)) }
+        // A fix: the fused location takes it (mock mode from the first fix on).
+        lastPublish = SystemClock.elapsedRealtime()
+        if (fused != null && !fusedOn && !fusedPending) fusedMode(true)
         if (fusedOn) runCatching { fused?.setMockLocation(location("fused", fix)) }
     }
 
@@ -105,7 +115,18 @@ class MockLocation(context: Context) {
             start()
             return
         }
-        if (fused != null && (!fusedOn || now - lastFusedMode > FUSED_MODE_MS)) fusedMode(true)
+        if (fused != null && fusedOn && now - lastFusedMode > FUSED_MODE_MS) fusedMode(true)
+    }
+
+    /**
+     * No fix lately (the receiver searches, a tunnel): the fused location goes
+     * back to its own sources (network), so apps reading it keep a position.
+     */
+    fun idle() {
+        if (fusedOn && SystemClock.elapsedRealtime() - lastPublish > FUSED_IDLE_MS) {
+            DebugLog.add("GPS USB : pas de position depuis 30 s, Google reprend la sienne")
+            fusedMode(false)
+        }
     }
 
     private fun isMock(l: Location): Boolean =
@@ -137,5 +158,6 @@ class MockLocation(context: Context) {
     private companion object {
         const val ENSURE_MS = 10_000L
         const val FUSED_MODE_MS = 60_000L
+        const val FUSED_IDLE_MS = 30_000L
     }
 }
