@@ -46,8 +46,11 @@ class ClassicTransport(private val device: BluetoothDevice) : BluetoothTransport
         val channel1 = SocketFactory("channel 1") {
             it.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType).invoke(it, 1) as BluetoothSocket
         }
-        val order = if (device.bondState == BluetoothDevice.BOND_BONDED) listOf(secure, insecure, channel1)
-                    else listOf(insecure, channel1, secure)
+        val base = if (device.bondState == BluetoothDevice.BOND_BONDED) listOf(secure, insecure, channel1)
+                   else listOf(insecure, channel1, secure)
+        // The kind that worked last time first: one short try instead of up to three
+        // long ones (each failed one holds the head unit's Bluetooth radio).
+        val order = base.sortedBy { if (it.name == lastGood) 0 else 1 }
 
         var lastError: Exception? = null
         for (factory in order) {
@@ -57,6 +60,7 @@ class ClassicTransport(private val device: BluetoothDevice) : BluetoothTransport
             try {
                 try { s.connect() } finally { watchdog.cancel() }
                 Log.d(TAG, "Connected with ${factory.name} socket")
+                lastGood = factory.name
                 DebugLog.add("Bluetooth connecté (socket ${factory.name})")
                 socket = s
                 inputStream = s.inputStream
@@ -101,22 +105,29 @@ class ClassicTransport(private val device: BluetoothDevice) : BluetoothTransport
         }
     }
 
+    // Read by blocks, not byte by byte: one system call per chunk the adapter sends.
+    // The ELM327 ends each answer with '>' and sends nothing after it until the next command.
     private suspend fun readUntilPrompt(inp: InputStream): String = runInterruptible {
         val buffer = StringBuilder()
-        val b = ByteArray(1)
+        val chunk = ByteArray(256)
         while (true) {
-            val read = inp.read(b)
+            val read = inp.read(chunk)
             if (read == -1) throw IOException("Stream closed")
-            val ch = b[0].toInt().toChar()
-            if (ch == '>') break
-            buffer.append(ch)
+            for (i in 0 until read) {
+                val ch = (chunk[i].toInt() and 0xFF).toChar()
+                if (ch == '>') return@runInterruptible buffer.toString().trim()
+                buffer.append(ch)
+            }
         }
+        @Suppress("UNREACHABLE_CODE")
         buffer.toString().trim()
     }
 
     companion object {
         private const val TAG = "ClassicTransport"
-        private const val CONNECT_TIMEOUT_MS = 12_000L
+        private const val CONNECT_TIMEOUT_MS = 8_000L
+        /** The socket kind that connected last (kept while the app runs). */
+        @Volatile private var lastGood: String? = null
         private val SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
     }
 }

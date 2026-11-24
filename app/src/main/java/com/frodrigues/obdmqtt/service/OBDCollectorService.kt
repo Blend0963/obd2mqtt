@@ -176,7 +176,9 @@ class OBDCollectorService : LifecycleService() {
     }
 
     private suspend fun collectWithRetry() {
-        val backoffMs = listOf(5_000L, 10_000L, 30_000L, 60_000L)
+        // Retry soon: without the OBD data most of the car's dashboard is blind.
+        // Engine off is handled apart (waitForWakeup with its own, longer, pace).
+        val backoffMs = listOf(3_000L, 5_000L, 10_000L, 20_000L, 30_000L)
         var attempt = 0
         var engineOff = false
         var bypassEngineGate = false
@@ -211,7 +213,7 @@ class OBDCollectorService : LifecycleService() {
                 waitForWakeup(config, recheckMs)
             } else {
                 status.value = ServiceStatus.RECONNECTING
-                val delay = backoffMs.getOrElse(attempt) { 60_000L }
+                val delay = backoffMs.getOrElse(attempt) { 30_000L }
                 attempt = minOf(attempt + 1, backoffMs.lastIndex)
                 updateNotification("Nouvelle tentative dans ${delay / 1000} s…")
                 waitForWakeup(config, delay)

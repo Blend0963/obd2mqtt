@@ -98,7 +98,10 @@ class WebhookTest {
         assertEquals(3, Regex("trigger\\.json\\.pids\\.get\\(").findAll(yaml).count())
         assertTrue(yaml.contains("unique_id: \"obd2_AABBCCDDEEFF_0C\""))
         assertTrue(yaml.contains("name: \"Test \\\"Car\\\" Régime moteur\""))
-        assertTrue(yaml.contains("state: \"{{ trigger.json.pids.get('0D') }}\""))
+        assertTrue(yaml.contains("state: \"{{ trigger.json.pids.get('0D') if trigger.platform == 'webhook' else this.state }}\""))
+        // a tick without payload: live readings expire, nothing is read from a missing payload
+        assertTrue(yaml.contains("- trigger: time_pattern"))
+        assertTrue(yaml.contains("(now() - as_datetime(this.attributes.recu)).total_seconds() < 60"))
         assertTrue(yaml.contains("state_class: total_increasing"))
         // sensors are emitted in PID order
         assertTrue(yaml.indexOf("_0C\"") < yaml.indexOf("_0D\""))
