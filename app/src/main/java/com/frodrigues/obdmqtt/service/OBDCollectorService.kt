@@ -164,19 +164,34 @@ class OBDCollectorService : LifecycleService() {
             buildNotification("Démarrage…"),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
         )
-        wakeLock = (getSystemService(POWER_SERVICE) as PowerManager)
-            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "OBDCollector::polling")
-            .also { it.acquire() }
+        // Already collecting (a second START: the USB GPS plugged in, its permission
+        // dialog, the boot receiver and the job all fire at ignition): leave it running.
+        // Restarting here launched a second Bluetooth connection while the first was
+        // still opening; the adapter takes only one, so each made the other fail.
+        if (collectorJob?.isActive == true) {
+            DebugLog.add("Démarrage demandé : collecte déjà en cours, rien à relancer")
+            recheckNow.trySend(Unit)  // waiting between two attempts: try again now
+            return
+        }
+        if (wakeLock?.isHeld != true) {
+            wakeLock = (getSystemService(POWER_SERVICE) as PowerManager)
+                .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "OBDCollector::polling")
+                .also { it.acquire() }
+        }
         val oldJob = collectorJob
         collectionStartedAt = System.currentTimeMillis()
         collectorJob = lifecycleScope.launch(Dispatchers.Default) {
-            oldJob?.cancelAndJoin()
+            // Wait for the previous run to be really over (its socket closed), even if
+            // this one is cancelled meanwhile: never two connections at once.
+            withContext(NonCancellable) { oldJob?.cancelAndJoin() }
             collectWithRetry()
         }
     }
 
     private suspend fun collectWithRetry() {
-        val backoffMs = listOf(5_000L, 10_000L, 30_000L, 60_000L)
+        // Retry soon: without the OBD data most of the car's dashboard is blind.
+        // Engine off is handled apart (waitForWakeup with its own, longer, pace).
+        val backoffMs = listOf(3_000L, 5_000L, 10_000L, 20_000L, 30_000L)
         var attempt = 0
         var engineOff = false
         var bypassEngineGate = false
@@ -211,7 +226,7 @@ class OBDCollectorService : LifecycleService() {
                 waitForWakeup(config, recheckMs)
             } else {
                 status.value = ServiceStatus.RECONNECTING
-                val delay = backoffMs.getOrElse(attempt) { 60_000L }
+                val delay = backoffMs.getOrElse(attempt) { 30_000L }
                 attempt = minOf(attempt + 1, backoffMs.lastIndex)
                 updateNotification("Nouvelle tentative dans ${delay / 1000} s…")
                 waitForWakeup(config, delay)

@@ -4,11 +4,16 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
+import android.content.Context
 import android.util.Log
 import com.frodrigues.obdmqtt.util.DebugLog
 import kotlinx.coroutines.Dispatchers
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,7 +27,10 @@ import java.io.OutputStream
 import java.util.UUID
 
 @SuppressLint("MissingPermission")
-class ClassicTransport(private val device: BluetoothDevice) : BluetoothTransport {
+class ClassicTransport(private val device: BluetoothDevice, context: Context? = null) : BluetoothTransport {
+
+    /** Where the socket kind that last worked is kept, across restarts (a force-stop, the unit rebooting). */
+    private val prefs = context?.applicationContext?.getSharedPreferences("bt_transport", Context.MODE_PRIVATE)
 
     private val _isConnected = MutableStateFlow(false)
     override val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
@@ -36,7 +44,9 @@ class ClassicTransport(private val device: BluetoothDevice) : BluetoothTransport
      * (no PIN dialog), and many ELM327 adapters accept an insecure link without pairing.
      * Unpaired adapters try the insecure socket first, so no pairing request is triggered.
      */
-    override suspend fun connect() = withContext(Dispatchers.IO) {
+    override suspend fun connect() = connectLock.withLock { connectOnce() }
+
+    private suspend fun connectOnce() = withContext(Dispatchers.IO) {
         @Suppress("DEPRECATION")
         runCatching { BluetoothAdapter.getDefaultAdapter()?.cancelDiscovery() }  // discovery slows RFCOMM down
 
@@ -46,17 +56,37 @@ class ClassicTransport(private val device: BluetoothDevice) : BluetoothTransport
         val channel1 = SocketFactory("channel 1") {
             it.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType).invoke(it, 1) as BluetoothSocket
         }
-        val order = if (device.bondState == BluetoothDevice.BOND_BONDED) listOf(secure, insecure, channel1)
-                    else listOf(insecure, channel1, secure)
+        val base = if (device.bondState == BluetoothDevice.BOND_BONDED) listOf(secure, insecure, channel1)
+                   else listOf(insecure, channel1, secure)
+        // The kind that worked last time first: one short try instead of up to three
+        // long ones (each failed one holds the head unit's Bluetooth radio).
+        val good = lastGood ?: prefs?.getString(KEY_GOOD + device.address, null)
+        val order = base.sortedBy { if (it.name == good) 0 else 1 }
 
         var lastError: Exception? = null
-        for (factory in order) {
+        for ((index, factory) in order.withIndex()) {
+            // The stack needs a moment after a socket is closed before the next one.
+            if (index > 0) delay(BETWEEN_SOCKETS_MS)
             val s = try { factory.create(device) } catch (e: Exception) { lastError = e; continue }
-            // connect() ignores thread interrupts: closing the socket is the only way to abort it
-            val watchdog = launch { delay(CONNECT_TIMEOUT_MS); runCatching { s.close() } }
             try {
-                try { s.connect() } finally { watchdog.cancel() }
+                // connect() blocks and ignores interrupts: closing the socket is the only
+                // way to abort it — on timeout, and when this coroutine is cancelled (the
+                // service restarting), so no connection goes on opening in the background.
+                supervisorScope {
+                    val opening = async { s.connect() }
+                    try {
+                        withTimeout(CONNECT_TIMEOUT_MS) { opening.await() }
+                    } catch (e: TimeoutCancellationException) {
+                        runCatching { s.close() }
+                        throw IOException("délai dépassé")
+                    } catch (e: CancellationException) {
+                        runCatching { s.close() }
+                        throw e
+                    }
+                }
                 Log.d(TAG, "Connected with ${factory.name} socket")
+                lastGood = factory.name
+                runCatching { prefs?.edit()?.putString(KEY_GOOD + device.address, factory.name)?.apply() }
                 DebugLog.add("Bluetooth connecté (socket ${factory.name})")
                 socket = s
                 inputStream = s.inputStream
@@ -101,22 +131,33 @@ class ClassicTransport(private val device: BluetoothDevice) : BluetoothTransport
         }
     }
 
+    // Read by blocks, not byte by byte: one system call per chunk the adapter sends.
+    // The ELM327 ends each answer with '>' and sends nothing after it until the next command.
     private suspend fun readUntilPrompt(inp: InputStream): String = runInterruptible {
         val buffer = StringBuilder()
-        val b = ByteArray(1)
+        val chunk = ByteArray(256)
         while (true) {
-            val read = inp.read(b)
+            val read = inp.read(chunk)
             if (read == -1) throw IOException("Stream closed")
-            val ch = b[0].toInt().toChar()
-            if (ch == '>') break
-            buffer.append(ch)
+            for (i in 0 until read) {
+                val ch = (chunk[i].toInt() and 0xFF).toChar()
+                if (ch == '>') return@runInterruptible buffer.toString().trim()
+                buffer.append(ch)
+            }
         }
+        @Suppress("UNREACHABLE_CODE")
         buffer.toString().trim()
     }
 
     companion object {
         private const val TAG = "ClassicTransport"
-        private const val CONNECT_TIMEOUT_MS = 12_000L
+        private const val CONNECT_TIMEOUT_MS = 8_000L
+        private const val BETWEEN_SOCKETS_MS = 400L
+        private const val KEY_GOOD = "good_socket_"
+        /** One connection at a time to the adapter (it accepts a single RFCOMM link). */
+        private val connectLock = Mutex()
+        /** The socket kind that connected last (kept while the app runs). */
+        @Volatile private var lastGood: String? = null
         private val SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
     }
 }
