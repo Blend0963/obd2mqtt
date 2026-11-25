@@ -164,13 +164,26 @@ class OBDCollectorService : LifecycleService() {
             buildNotification("Démarrage…"),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
         )
-        wakeLock = (getSystemService(POWER_SERVICE) as PowerManager)
-            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "OBDCollector::polling")
-            .also { it.acquire() }
+        // Already collecting (a second START: the USB GPS plugged in, its permission
+        // dialog, the boot receiver and the job all fire at ignition): leave it running.
+        // Restarting here launched a second Bluetooth connection while the first was
+        // still opening; the adapter takes only one, so each made the other fail.
+        if (collectorJob?.isActive == true) {
+            DebugLog.add("Démarrage demandé : collecte déjà en cours, rien à relancer")
+            recheckNow.trySend(Unit)  // waiting between two attempts: try again now
+            return
+        }
+        if (wakeLock?.isHeld != true) {
+            wakeLock = (getSystemService(POWER_SERVICE) as PowerManager)
+                .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "OBDCollector::polling")
+                .also { it.acquire() }
+        }
         val oldJob = collectorJob
         collectionStartedAt = System.currentTimeMillis()
         collectorJob = lifecycleScope.launch(Dispatchers.Default) {
-            oldJob?.cancelAndJoin()
+            // Wait for the previous run to be really over (its socket closed), even if
+            // this one is cancelled meanwhile: never two connections at once.
+            withContext(NonCancellable) { oldJob?.cancelAndJoin() }
             collectWithRetry()
         }
     }

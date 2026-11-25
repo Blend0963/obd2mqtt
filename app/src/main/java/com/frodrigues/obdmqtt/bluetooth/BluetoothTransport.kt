@@ -25,6 +25,6 @@ object BluetoothTransportFactory {
             BtTransport.CLASSIC -> false
             BtTransport.AUTO -> device.type == BluetoothDevice.DEVICE_TYPE_LE
         }
-        return if (ble) BleTransport(context, device) else ClassicTransport(device)
+        return if (ble) BleTransport(context, device) else ClassicTransport(device, context)
     }
 }
