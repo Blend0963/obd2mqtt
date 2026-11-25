@@ -124,6 +124,7 @@ class WebhookTest {
 
         val yaml = HaWebhookYaml.generate(config, setOf(0x0D))
         assertTrue(yaml.contains("name: \"Test \\\"Car\\\" Trajet\""))
-        assertTrue(yaml.contains("trigger.json.trip.fuel_lh"))
+        // the trip read from the payload only (a tick has none), then its fuel rate
+        assertTrue(yaml.contains("(trigger.json.trip if trigger.platform == 'webhook' else none).fuel_lh"))
     }
 }
